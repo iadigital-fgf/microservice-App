@@ -1,0 +1,9 @@
+mercado externo e interno - dolares fob 2026
+
+
+.\fgf_service\.venv\Scripts\Activate.ps1
+fgf_service\.venv\Scripts\uvicorn.exe fgf_service.main:app --reload
+
+
+APIVentasCap
+APIAnalisisFacturacion

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+# Secrets
+.env
+# IDE / OS
+.vscode/
+.idea/
+.claude/
+*.swp
+Thumbs.db
