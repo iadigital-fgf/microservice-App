@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fgf_service.core.config import settings
 from fgf_service.reports.ventas_industria.router import router as ventas_industria_router
-
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env en la raíz del repo (Marco-App), aunque uvicorn se ejecute desde ahí o desde fgf_service
@@ -14,13 +13,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Auth
-    api_bearer_token: str
-
-    # Finnegans — token: {finnegans_base_url}/oauth/token
-    finnegans_base_url: str = "https://api.finneg.com/api"
-    finnegans_client_id: str = Field(validation_alias="CLIENT_ID")
-    finnegans_client_secret: str = Field(validation_alias="CLIENT_SECRET")
+    finnegans_base_url: str
 
     # Redis
     redis_url: str = "redis://localhost:6379"

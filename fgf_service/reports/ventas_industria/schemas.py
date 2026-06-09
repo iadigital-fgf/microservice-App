@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from fgf_service.core.base_schemas import FinnegansBase
 
 
-class VentasCapRaw(BaseModel):
+class APIVentasCapRaw(FinnegansBase):
     """Registro crudo de APIVentasCap."""
 
     transaccionsubtipoid: int | None = None
@@ -48,7 +50,7 @@ class VentasCapRaw(BaseModel):
     aforo: float | None = None
     fobkg: float | None = None
     fob18kg: float | None = None
-    kg18: float | None = Field(None, alias="18KG")
+    kg18: float | None = Field(None, alias="18kg")
     incoterm: str | None = None
     preciomonprincipal: float | None = None
     preciomonsecundaria: float | None = None
@@ -59,7 +61,7 @@ class VentasCapRaw(BaseModel):
     preciosobre: str | None = None
     importe: float | None = None
     gravado: float | None = None
-    no_gravado: float | None = Field(None, alias="NO GRAVADO")
+    no_gravado: float | None = Field(None, alias="no gravado")
     proveedor: str | None = None
     partida: str | None = None
     estado: str | None = None
@@ -73,16 +75,16 @@ class VentasCapRaw(BaseModel):
     cuenta: str | None = None
     empresa: str | None = None
     ano: str | None = None
-    ano_mes: str | None = Field(None, alias="ANO-MES")
+    ano_mes: str | None = Field(None, alias="ano-mes")
     productorama1: str | None = None
     productorama2: str | None = None
     productorama3: str | None = None
     productoraman: str | None = None
     porcentajeimpositivo: float | None = None
-    clasevo: str | None = Field(None, alias="@@CLASEVO")
+    clasevo: str | None = Field(None, alias="@@clasevo")
     fechaproximopaso: str | None = None
-    semanacargadesde: int | None = None
-    semanacargahasta: int | None = None
+    semanacargadesde: int | str | None = None
+    semanacargahasta: int | str | None = None
     provinciadestino: str | None = None
     provinciaorigen: str | None = None
     coordenadas: str | None = None
@@ -107,18 +109,15 @@ class VentasCapRaw(BaseModel):
     cobradomonsec: float | None = None
     semanaeta: str | None = None
     pallets: int | None = None
-    nc_cantidad: float | None = Field(None, alias="NC-CANTIDAD")
-    nc_monsec: float | None = Field(None, alias="NC-MONSEC")
+    nc_cantidad: float | None = Field(None, alias="nc-cantidad")
+    nc_monsec: float | None = Field(None, alias="nc-monsec")
     tipocambio: float | None = None
     reembolso: float | None = None
     cobradoaplicadomonsec: float | None = None
     familia: str | None = None
     sector: str | None = None
 
-    model_config = {"populate_by_name": True}
-
-
-class FacturacionRaw(BaseModel):
+class APIAnalisisFacturacionRaw(FinnegansBase):
     """Registro crudo de APIAnalisisFacturacion."""
 
     transaccionsubtipoid: int | None = None
@@ -161,7 +160,7 @@ class FacturacionRaw(BaseModel):
     preciosobre: str | None = None
     importe: float | None = None
     gravado: float | None = None
-    no_gravado: float | None = Field(None, alias="NO GRAVADO")
+    no_gravado: float | None = Field(None, alias="no gravado")
     proveedor: str | None = None
     partida: str | None = None
     estado: str | None = None
@@ -175,7 +174,7 @@ class FacturacionRaw(BaseModel):
     cuenta: str | None = None
     empresa: str | None = None
     ano: str | None = None
-    ano_mes: str | None = Field(None, alias="ANO-MES")
+    ano_mes: str | None = Field(None, alias="ano-mes")
     productorama1: str | None = None
     productorama2: str | None = None
     productorama3: str | None = None
@@ -184,16 +183,16 @@ class FacturacionRaw(BaseModel):
     controlimpositivo3: str | None = None
     gravadoportasaimpositiva: float | None = None
     gravadoportasaimpositivamonedaprincipal: float | None = None
-    clasevo: str | None = Field(None, alias="@@CLASEVO")
+    clasevo: str | None = Field(None, alias="@@clasevo")
     fechaproximopaso: str | None = None
-    semanacargadesde: int | None = None
-    semanacargahasta: int | None = None
+    semanacargadesde: int | str | None = None
+    semanacargahasta: int | str | None = None
     provinciadestino: str | None = None
     provinciaorigen: str | None = None
     coordenadas: str | None = None
     corredor: str | None = None
     sucursal: str | None = None
-    cai_cae: str | None = Field(None, alias="CAI/CAE")
+    cai_cae: str | None = Field(None, alias="cai/cae")
     nivel1dimension: str | None = None
     nivel2dimension: str | None = None
     nivel1cliente: str | None = None
@@ -221,11 +220,52 @@ class FacturacionRaw(BaseModel):
     cuentacompras: str | None = None
     especie: str | None = None
 
-    model_config = {"populate_by_name": True}
+class APIAnalisisLaboratorioRaw(FinnegansBase):
+    """Registro crudo de APIAnalisisLaboratorio."""
+
+    analisisid: int | None = None
+    lote: str | None = None
+    cod_ana: str | None = None
+    cod_finn: str | None = None
+    nombre: str | None = None
+    valor: str | None = None
+    item: str | None = None
+    productoid: int | None = None
+    productofinn: str | None = None
+    familia: str | None = None
 
 
-class ConsolidacionVentasIndustria(BaseModel):
+class APIStockProdIndustriaRaw(FinnegansBase):
+    """Registro crudo de APIStockProdIndustria."""
+
+    producto: str | None = None
+    productocodigo: str | None = None
+    deposito: str | None = None
+    cantidad1: float | None = None
+    unidad1: str | None = None
+    cantidad2: float | None = None
+    unidad2: str | None = None
+    lugar: str | None = None
+    relacioncantidades: float | None = None
+    partida: str | None = None
+    partida_alta: str | None = None
+    organizacion: str | None = None
+    marca: str | None = None
+    subfamilia: str | None = None
+    familia: str | None = None
+    especie: str | None = None
+    categoria: str | None = None
+    pais: str | None = None
+    produccion: str | None = None
+    factorexp: float | None = None
+    estadocalidad: str | None = None
+    estadocomex: str | None = None
+
+
+class ConsolidacionVentasIndustria(FinnegansBase):
     """Consolida los registros de ambas APIs."""
 
-    ventas_cap: list[VentasCapRaw]
-    analisis_fac: list[FacturacionRaw]
+    ventas_cap: list[APIVentasCapRaw]
+    analisis_fac: list[APIAnalisisFacturacionRaw]
+    analisis_lab: list[APIAnalisisLaboratorioRaw]
+    stock_prod_industria: list[APIStockProdIndustriaRaw]

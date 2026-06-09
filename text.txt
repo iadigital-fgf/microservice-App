@@ -2,8 +2,10 @@ mercado externo e interno - dolares fob 2026
 
 
 .\fgf_service\.venv\Scripts\Activate.ps1
-fgf_service\.venv\Scripts\uvicorn.exe fgf_service.main:app --reload
+fgf_service\.venv\Scripts\uvicorn.exe fgf_service.main:app --port 8080 --reload
 
 
 APIVentasCap
 APIAnalisisFacturacion
+
+url : http://127.0.0.1:8080/api/v1/reportes/ventas-industria/prueba
