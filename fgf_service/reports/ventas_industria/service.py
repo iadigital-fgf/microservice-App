@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from datetime import date
 
 from fgf_service.connectors.APIanalisis_facturacion import fetch_APIAnalisis_facturacion
-from fgf_service.connectors.APIStockProdIndustria import fetch_APIStockProdIndustria
 from fgf_service.connectors.APIanalisis_laboratorio import fetch_APIAnalisis_laboratorio
+from fgf_service.connectors.APIStockProdIndustria import fetch_APIStockProdIndustria
 from fgf_service.connectors.APIventas_cap import fetch_APIVentas_cap
+from fgf_service.core.empresas import MERCADO_POR_EMPRESA, MercadoExterno, Stock
+from fgf_service.helpers.parsers import parse_finnegans
 from fgf_service.reports.ventas_industria.schemas import (
     ConsolidacionVentasIndustria,
     APIVentasCapRaw,
@@ -13,42 +16,75 @@ from fgf_service.reports.ventas_industria.schemas import (
     APIStockProdIndustriaRaw,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def separar_por_mercado(registros: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Separa registros de APIAnalisisFacturacion en (externo, interno) según el campo EMPRESA."""
+    externo: list[dict] = []
+    interno: list[dict] = []
+    sin_clasificar: set[str] = set()
+
+    for registro in registros:
+        empresa = registro.get("EMPRESA", "")
+        mercado = MERCADO_POR_EMPRESA.get(empresa)
+        if mercado == "externo":
+            externo.append(registro)
+        elif mercado == "interno":
+            interno.append(registro)
+        else:
+            sin_clasificar.add(empresa)
+
+    if sin_clasificar:
+        logger.warning(
+            "Empresas sin clasificar en MERCADO_POR_EMPRESA (registros descartados): %s",
+            sorted(sin_clasificar),
+        )
+
+    return externo, interno
+
 
 async def reporte_ventas_industria(
     fecha_desde: date, fecha_hasta: date, access_token: str
 ) -> ConsolidacionVentasIndustria:
 
-    raw_cap, raw_dt, raw_fac, raw_lab, raw_stock_arg, raw_stock_dohler63, raw_stock_empre01 = await asyncio.gather(
-        #API Ventas Cap
-        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa="CAPACITACION43"),
-        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa="DOHLER63"),
-        #API Analisis Facturacion
+    (
+        raw_ventas_cap,
+        raw_ventas_dt,
+        raw_facturacion,
+        raw_lab,
+        raw_stock_arg,
+        raw_stock_ext,
+        raw_stock_dt,
+    ) = await asyncio.gather(
+        # Mercado Externo — APIVentasCap
+        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.CAPACITACION43),
+        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.DOHLER),
+        # APIAnalisisFacturacion — sin empresa: trae todas, se separan por mercado abajo
         fetch_APIAnalisis_facturacion(fecha_desde, fecha_hasta, access_token),
-        #API Analisis Laboratorio
+        # Laboratorio
         fetch_APIAnalisis_laboratorio(access_token),
-        #API Stock Prod Industria
-        #STOCKARG
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa="EMPRE01")
-        #STOCKDOHLER63
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa="DOHLER63"),
-        #STOCKEMPRE01
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa="EMPRE01"),
+        # Stock Argentina
+        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.ARG),
+        # Stock Exterior
+        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.EXT),
+        # Stock DT
+        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.DT),
     )
 
+    raw_fac_me, raw_fac_mi = separar_por_mercado(raw_facturacion)
+
     return ConsolidacionVentasIndustria(
-        #API Ventas Cap
-        ventas_cap=[APIVentasCapRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_cap],
-        #API Ventas DT
-        ventas_dt=[APIVentasCapRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_dt],
-        #API Analisis Facturacion
-        analisis_fac=[APIAnalisisFacturacionRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_fac],
-        #API Analisis Laboratorio
-        analisis_lab=[APIAnalisisLaboratorioRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_lab],
-        #API Stock Prod Industria
-        #STOCKARG
-        stock_prod_industria_arg=[APIStockProdIndustriaRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_stock_arg],
-        #STOCKDOHLER63
-        stock_prod_industria_dohler63=[APIStockProdIndustriaRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_stock_dohler63],
-        #STOCKEMPRE01
-        stock_prod_industria_empre01=[APIStockProdIndustriaRaw.model_validate({k.lower(): v for k, v in item.items()}) for item in raw_stock_empre01],
+        # Mercado Externo — APIVentasCap
+        ventas_cap=parse_finnegans(raw_ventas_cap, APIVentasCapRaw),
+        ventas_dt=parse_finnegans(raw_ventas_dt, APIVentasCapRaw),
+        # APIAnalisisFacturacion separado por mercado
+        fac_me=parse_finnegans(raw_fac_me, APIAnalisisFacturacionRaw),
+        fac_mi=parse_finnegans(raw_fac_mi, APIAnalisisFacturacionRaw),
+        # Laboratorio
+        analisis_lab=parse_finnegans(raw_lab, APIAnalisisLaboratorioRaw),
+        # Stock
+        stock_arg=parse_finnegans(raw_stock_arg, APIStockProdIndustriaRaw),
+        stock_ext=parse_finnegans(raw_stock_ext, APIStockProdIndustriaRaw),
+        stock_dt=parse_finnegans(raw_stock_dt, APIStockProdIndustriaRaw),
     )

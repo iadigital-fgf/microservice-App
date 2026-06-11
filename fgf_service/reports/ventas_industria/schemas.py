@@ -261,10 +261,20 @@ class APIStockProdIndustriaRaw(FinnegansBase):
     estadocomex: str | None = None
 
 class ConsolidacionVentasIndustria(FinnegansBase):
-    """Consolida los registros de ambas APIs."""
+    """Consolida los registros de todas las APIs del reporte ventas industria."""
 
+    # Mercado Externo — APIVentasCap
     ventas_cap: list[APIVentasCapRaw]
     ventas_dt: list[APIVentasCapRaw]
-    analisis_fac: list[APIAnalisisFacturacionRaw]
+
+    # APIAnalisisFacturacion — separado por mercado según el campo EMPRESA
+    fac_me: list[APIAnalisisFacturacionRaw]
+    fac_mi: list[APIAnalisisFacturacionRaw]
+
+    # Laboratorio
     analisis_lab: list[APIAnalisisLaboratorioRaw]
-    stock_prod_industria: list[APIStockProdIndustriaRaw]
+
+    # Stock
+    stock_arg: list[APIStockProdIndustriaRaw]
+    stock_ext: list[APIStockProdIndustriaRaw]
+    stock_dt: list[APIStockProdIndustriaRaw]
