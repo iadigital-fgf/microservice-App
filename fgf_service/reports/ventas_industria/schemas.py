@@ -234,7 +234,6 @@ class APIAnalisisLaboratorioRaw(FinnegansBase):
     productofinn: str | None = None
     familia: str | None = None
 
-
 class APIStockProdIndustriaRaw(FinnegansBase):
     """Registro crudo de APIStockProdIndustria."""
 
@@ -261,11 +260,11 @@ class APIStockProdIndustriaRaw(FinnegansBase):
     estadocalidad: str | None = None
     estadocomex: str | None = None
 
-
 class ConsolidacionVentasIndustria(FinnegansBase):
     """Consolida los registros de ambas APIs."""
 
     ventas_cap: list[APIVentasCapRaw]
+    ventas_dt: list[APIVentasCapRaw]
     analisis_fac: list[APIAnalisisFacturacionRaw]
     analisis_lab: list[APIAnalisisLaboratorioRaw]
     stock_prod_industria: list[APIStockProdIndustriaRaw]
