@@ -263,9 +263,8 @@ class APIStockProdIndustriaRaw(FinnegansBase):
 class ConsolidacionVentasIndustria(FinnegansBase):
     """Consolida los registros de todas las APIs del reporte ventas industria."""
 
-    # Mercado Externo — APIVentasCap
+    # Mercado Externo — APIVentasCap (una sola llamada, sin empresa)
     ventas_cap: list[APIVentasCapRaw]
-    ventas_dt: list[APIVentasCapRaw]
 
     # APIAnalisisFacturacion — separado por mercado según el campo EMPRESA
     fac_me: list[APIAnalisisFacturacionRaw]

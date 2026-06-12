@@ -6,7 +6,7 @@ from fgf_service.connectors.APIanalisis_facturacion import fetch_APIAnalisis_fac
 from fgf_service.connectors.APIanalisis_laboratorio import fetch_APIAnalisis_laboratorio
 from fgf_service.connectors.APIStockProdIndustria import fetch_APIStockProdIndustria
 from fgf_service.connectors.APIventas_cap import fetch_APIVentas_cap
-from fgf_service.core.empresas import MERCADO_POR_EMPRESA, MercadoExterno, Stock
+from fgf_service.core.empresas import MERCADO_POR_EMPRESA, Stock
 from fgf_service.helpers.parsers import parse_finnegans
 from fgf_service.reports.ventas_industria.schemas import (
     ConsolidacionVentasIndustria,
@@ -50,16 +50,15 @@ async def reporte_ventas_industria(
 
     (
         raw_ventas_cap,
-        raw_ventas_dt,
         raw_facturacion,
         raw_lab,
         raw_stock_arg,
         raw_stock_ext,
         raw_stock_dt,
     ) = await asyncio.gather(
-        # Mercado Externo — APIVentasCap
-        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.CAPACITACION43),
-        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.DOHLER),
+        # Mercado Externo — APIVentasCap sin empresa: trae todas las exportaciones
+        # en una sola llamada (el parámetro empresa no filtra de verdad y duplicaba datos)
+        fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token),
         # APIAnalisisFacturacion — sin empresa: trae todas, se separan por mercado abajo
         fetch_APIAnalisis_facturacion(fecha_desde, fecha_hasta, access_token),
         # Laboratorio
@@ -77,7 +76,6 @@ async def reporte_ventas_industria(
     return ConsolidacionVentasIndustria(
         # Mercado Externo — APIVentasCap
         ventas_cap=parse_finnegans(raw_ventas_cap, APIVentasCapRaw),
-        ventas_dt=parse_finnegans(raw_ventas_dt, APIVentasCapRaw),
         # APIAnalisisFacturacion separado por mercado
         fac_me=parse_finnegans(raw_fac_me, APIAnalisisFacturacionRaw),
         fac_mi=parse_finnegans(raw_fac_mi, APIAnalisisFacturacionRaw),
