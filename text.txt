@@ -25,3 +25,8 @@ El reporte final agrupa por familia y calcula: VENTAS USD (totalfob), VENTAS TN 
 El flujo de trabajo es: proponer qué hacer → esperar okey del usuario → editar → usuario prueba → corregir → seguir. Nunca editar sin okey previo. Explicar cada cálculo con palabras simples.
 
 Analizá el proyecto leyendo los archivos en microservice-App\fgf_service\ y continuá desde donde estábamos.
+
+
+Reporte final	/api/v1/reportes/ventas-industria
+Detalle ventas	/api/v1/reportes/ventas-industria/detalle/ventas
+Detalle stock	/api/v1/reportes/ventas-industria/detalle/stock

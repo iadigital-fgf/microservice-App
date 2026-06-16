@@ -7,7 +7,6 @@ viene con valores negativos y resta sola al sumar).
 
 import pandas as pd
 
-from fgf_service.core.empresas import MERCADO_POR_EMPRESA
 from fgf_service.core.segmentos import asignar_segmento
 from fgf_service.reports.ventas_industria.schemas import (
     APIVentasCapRaw,
@@ -62,17 +61,20 @@ def detalle_ventas_cap(registros: list[APIVentasCapRaw]) -> pd.DataFrame:
 def detalle_facturacion(registros: list[APIAnalisisFacturacionRaw]) -> pd.DataFrame:
     """Renglones de APIAnalisisFacturacion → formato común.
 
-    El mercado sale del campo EMPRESA. Los USD según el mercado:
-    externo (fibras Dohler) usa fobtotal, interno usa importemonsecundaria
-    (la factura en pesos convertida a USD al tipo de cambio del día).
+    El mercado se decide por el TIPO DE DOCUMENTO (transacconsubtiponombre):
+    si dice "Exportación" es externo y los USD salen de fobtotal; si no,
+    es interno y los USD salen de importemonsecundaria (la factura en pesos
+    convertida a USD). Es el mismo criterio que usa Marco en su Excel:
+    una misma empresa emite facturas de exportación y de mercado interno.
     """
     filas = []
     for r in registros:
-        mercado = MERCADO_POR_EMPRESA.get((r.empresa or "").strip())
-        usd = r.fobtotal if mercado == "externo" else r.importemonsecundaria
+        es_export = "exporta" in (r.transacconsubtiponombre or "").lower()
+        mercado = "externo" if es_export else "interno"
+        usd = r.fobtotal if es_export else r.importemonsecundaria
         filas.append({
             "fuente": "APIAnalisisFacturacion",
-            "mercado": mercado or "sin clasificar",
+            "mercado": mercado,
             "segmento": asignar_segmento(r.familia, r.subfamilia, r.producto),
             "fecha": r.fecha,
             "comprobante": r.comprobante,

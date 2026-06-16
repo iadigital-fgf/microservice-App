@@ -10,8 +10,8 @@ async def fetch_APIVentas_cap(
         "APIVentascap",
         access_token=access_token,
         params={
-            "PARAMWEB REPORT_FechaDesde": fecha_desde.strftime("%d-%m-%Y"),
-            "PARAMWEB REPORT_FechaHasta": fecha_hasta.strftime("%d-%m-%Y"),
-            "PARAMWEB REPORT_Empresa": empresa if empresa else None,
+            "PARAMWEBREPORT_FechaDesde": fecha_desde.strftime("%Y-%m-%d"),
+            "PARAMWEBREPORT_FechaHasta": fecha_hasta.strftime("%Y-%m-%d"),
+            "PARAMWEBREPORT_Empresa": empresa if empresa else None,
         },
     )

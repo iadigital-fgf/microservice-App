@@ -10,7 +10,7 @@ async def fetch_APIStockProdIndustria(
         "APIStockProdIndustria",
         access_token=access_token,
         params={
-            "PARAMWEB REPORT_Fecha": fecha_hasta.strftime("%d-%m-%Y"),
-            "PARAMWEB REPORT_Empresa": empresa,
+            "PARAMWEBREPORT_Fecha": fecha_hasta.strftime("%Y-%m-%d"),
+            "PARAMWEBREPORT_Empresa": empresa,
         },
     )

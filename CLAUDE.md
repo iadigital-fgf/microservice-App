@@ -54,24 +54,53 @@ Parámetros `empresa` para otras APIs (códigos en core/empresas.py):
 - APIVentasCap (mercado externo): `CAPACITACION43` (todo ME excepto fibra) + `DOHLER63` (fibra).
 - APIStockProdIndustria: `EMPRE01` (ARG) + `CAPACITACION43` (EXT) + `DOHLER63` (DT).
 
-## Reporte ventas_industria — cálculos
+## Reporte ventas_industria — arquitectura del cálculo
 
-Por familia (JUGO, ACEITE, FIBRA, PULPA — FAMILIA vacía = limón fresco, se excluye):
-- VENTAS USD: suma de `totalfob` (APIVentasCap) / `fobtotal` (APIAnalisisFacturacion).
-- VENTAS TN: suma de `cantidad`.
-- PRECIO USD/TN: ventas_usd / ventas_tn.
-- STOCK TN: `cantidad2` / 1000 (viene en kilos), sumando ARG + EXT + DT.
+Flujo: connectors → service (trae datos) → detalle.py (traduce + apila) →
+kpis.py (suma por segmento) → router.py (3 endpoints, formatea el final).
 
-El reporte se divide en Mercado Externo y Mercado Interno.
-Frecuencia de uso de Marco: semanal, acumulado desde 01/01 hasta la fecha.
+**Segmento** = familia comercial del reporte (ACEITES, CASCARAS, FIBRAS,
+JUGOS CONCENTRADOS, JUGOS NFC, JUGOS TOP, OTROS). Se asigna en `core/segmentos.py`
+con cadena: 1) tabla exacta producto→segmento (`core/productos.py`, generada del
+Excel hoja Producto-Segmento), 2) familia+subfamilia, 3) SIN CLASIFICAR.
+ACEITE DE SEMILLA va a ACEITES. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPIs.
 
-## Pendientes
+**Reglas de negocio descubiertas (críticas):**
+- **Parámetros API SIN espacio y fecha YYYY-MM-DD**: `PARAMWEBREPORT_Empresa`,
+  `PARAMWEBREPORT_FechaDesde/Hasta`. Con espacio la API los IGNORA (no filtra
+  empresa ni fecha). Fue la causa de fibras, fechas y stock triplicado.
+- **Mercado por tipo de documento, NO por empresa**: si `transacconsubtiponombre`
+  contiene "Exportación" → externo (usa `fobtotal`); si no → interno
+  (usa `importemonsecundaria`). Una misma empresa factura export e interno.
+- **VentasCap se llama SIN empresa** (1 sola vez, trae todas las exportaciones).
+- **Dohler (fibras) necesita llamada dedicada** `empresa=DOHLER63`; la llamada
+  general no trae sus exportaciones. Se sacan las filas Dohler de la general
+  para no duplicar.
+- **ME**: USD y TN de VentasCap, EXCEPTO fibras → USD de Dohler, TN de VentasCap.
+- **MI**: solo FGF TRAPANI S.A. + fibras Dohler.
+- **TN** = `cantidadstock2`/1000 si `unidadstock2`=="Kilos".
+- Formato final (solo endpoint reporte): entero (regla 50) + miles con punto.
+  El detalle queda numérico (Marco lo formatea en Excel).
 
-- Completar kpis.py (ventas, precio y stock por familia) y conectarlo al router.
-- Redis + APScheduler (refresh diario 6am, acumulado 01/01 → hoy) — diferido.
-- Presupuesto (viene de otra API) — diferido.
+## Estado de validación (al 2026-06-16, contra Excel 03/06)
+
+Mercado Externo USD: ACEITES, CASCARAS, FIBRAS, JUGOS CONCENTRADOS, JUGOS NFC
+dan EXACTO. Falta JUGOS TOP (da 266k vs 420k esperado).
+
+## Pendientes (próxima sesión, en orden)
+
+1. **JUGOS TOP**: gap de ~154k. Filas existentes están bien (positivas,
+   clasificadas, sin NC). Faltan filas → cruzar qué productos cuenta Marco
+   como "JUGO LIMON TOP" que nosotros no.
+2. **TN finas**: dan un poco altas (ACEITES, CASCARAS, CONC, NFC). Causa
+   probable: notas de crédito. La fórmula TN es idéntica a Marco; revisar signos/NC.
+3. **Mercado Interno**: validar contra Excel (hay un OTROS de ~1,8M que se cuela).
+4. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
+   Marco cuenta solo lo vendible + warrant activo.
+- Redis + APScheduler (refresh diario 6am) — diferido.
+- Presupuesto (Excel manual del área comercial, NO viene de API) — diferido.
 - Datos históricos 2025 — diferido.
-- Front propio para Marco — diferido.
+- Front propio para Marco — diferido (Excel de depuración sobre /detalle alcanza).
 
 ## Referencias
 

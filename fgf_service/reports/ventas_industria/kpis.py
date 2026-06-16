@@ -47,26 +47,39 @@ def _resumir(df: pd.DataFrame) -> pd.DataFrame:
     resumen["precio_usd_tn"] = (
         resumen["ventas_usd"] / resumen["ventas_tn"].replace(0, pd.NA)
     ).round(2)
+    resumen["ventas_usd"] = resumen["ventas_usd"].round(2)
+    resumen["ventas_tn"] = resumen["ventas_tn"].round(2)
     return resumen
 
 
 def kpis_mercado_externo(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
     """KPIs de exportación.
 
-    Receta:
-    - VentasCap entero: es la ventanilla de exportación, todo cuenta.
-    - De Facturación, SOLO las filas externas de Dohler (fibras):
-      son las únicas exportaciones que VentasCap no ve.
-    - El resto de filas externas de Facturación se excluye porque
-      repiten ventas que ya están en VentasCap (doble conteo).
+    Receta (la de Marco):
+    - Toda la base (USD y TN de todos los segmentos) sale de VentasCap.
+    - EXCEPCIÓN fibras: el USD sale de Dohler (facturación exportación),
+      pero la TN se mantiene de VentasCap. Por eso fibra mezcla dos fuentes:
+      USD de Dohler, toneladas de VentasCap.
     """
-    cap = detalle_ventas["fuente"] == "APIVentasCap"
-    fibras_dohler = (
-        (detalle_ventas["fuente"] == "APIAnalisisFacturacion")
-        & (detalle_ventas["mercado"] == "externo")
-        & (detalle_ventas["empresa"] == EMPRESA_FIBRAS_ME)
+    # Base completa desde VentasCap: TN correcta de todo, USD correcto
+    # de todo menos fibra.
+    cap = detalle_ventas[detalle_ventas["fuente"] == "APIVentasCap"]
+    base = _resumir(_solo_industria(cap))
+
+    # Fibras: reemplazar SOLO el USD por el de Dohler, manteniendo la TN
+    usd_fibra = float(
+        detalle_ventas[
+            (detalle_ventas["fuente"] == "APIAnalisisFacturacion")
+            & (detalle_ventas["mercado"] == "externo")
+            & (detalle_ventas["segmento"] == "FIBRAS")
+        ]["usd"].sum()
     )
-    return _resumir(_solo_industria(detalle_ventas[cap | fibras_dohler]))
+    mask = base["segmento"] == "FIBRAS"
+    if mask.any():
+        tn = base.loc[mask, "ventas_tn"].iloc[0]
+        base.loc[mask, "ventas_usd"] = round(usd_fibra, 2)
+        base.loc[mask, "precio_usd_tn"] = round(usd_fibra / tn, 2) if tn else None
+    return base
 
 
 def kpis_mercado_interno(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
@@ -89,10 +102,12 @@ def kpis_stock(detalle_stock: pd.DataFrame) -> pd.DataFrame:
     """Stock en toneladas por segmento, sumando los 3 depósitos (ARG+EXT+DT)."""
     if detalle_stock.empty:
         return pd.DataFrame(columns=["segmento", "stock_tn"])
-    return (
+    resumen = (
         detalle_stock.groupby("segmento", as_index=False)
         .agg(stock_tn=("tn", "sum"))
     )
+    resumen["stock_tn"] = resumen["stock_tn"].round(2)
+    return resumen
 
 
 def kpis_total(me: pd.DataFrame, mi: pd.DataFrame) -> pd.DataFrame:

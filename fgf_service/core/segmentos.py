@@ -19,7 +19,6 @@ SEGMENTO_POR_FAMILIA_SUBFAMILIA = {
 
 # Familias que van enteras a OTROS, sin importar la subfamilia
 FAMILIAS_OTROS = {
-    "ACEITE DE SEMILLA",
     "CERA",
     "DESTILADO",
     "ESENCIA",
@@ -35,7 +34,6 @@ SIN_CLASIFICAR = "SIN CLASIFICAR"
 # sin clasificar se excluye hasta que se le escriba su regla.
 SEGMENTOS_EXCLUIDOS_KPIS = {"FRUTA FRESCA", SIN_CLASIFICAR}
 
-
 def asignar_segmento(
     familia: str | None,
     subfamilia: str | None,
@@ -43,8 +41,8 @@ def asignar_segmento(
 ) -> str:
     """Devuelve el segmento comercial de un registro.
 
-    Cadena de tres intentos:
-    1. Por nombre de producto (la tabla oficial Producto-Segmento de Marco).
+    Cadena de tres intentos, de más preciso a más general:
+    1. Por nombre de producto exacto (la tabla oficial Producto-Segmento).
     2. Por familia + subfamilia fabril (el mapeo del Excel de stock).
     3. SIN CLASIFICAR, para que el registro no se pierda y quede visible.
     """

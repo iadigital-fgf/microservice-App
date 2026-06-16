@@ -6,7 +6,7 @@ from fgf_service.connectors.APIanalisis_facturacion import fetch_APIAnalisis_fac
 from fgf_service.connectors.APIanalisis_laboratorio import fetch_APIAnalisis_laboratorio
 from fgf_service.connectors.APIStockProdIndustria import fetch_APIStockProdIndustria
 from fgf_service.connectors.APIventas_cap import fetch_APIVentas_cap
-from fgf_service.core.empresas import MERCADO_POR_EMPRESA, Stock
+from fgf_service.core.empresas import MercadoExterno, Stock
 from fgf_service.helpers.parsers import parse_finnegans
 from fgf_service.reports.ventas_industria.schemas import (
     ConsolidacionVentasIndustria,
@@ -18,30 +18,11 @@ from fgf_service.reports.ventas_industria.schemas import (
 
 logger = logging.getLogger(__name__)
 
-
-def separar_por_mercado(registros: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Separa registros de APIAnalisisFacturacion en (externo, interno) según el campo EMPRESA."""
-    externo: list[dict] = []
-    interno: list[dict] = []
-    sin_clasificar: set[str] = set()
-
-    for registro in registros:
-        empresa = registro.get("EMPRESA", "")
-        mercado = MERCADO_POR_EMPRESA.get(empresa)
-        if mercado == "externo":
-            externo.append(registro)
-        elif mercado == "interno":
-            interno.append(registro)
-        else:
-            sin_clasificar.add(empresa)
-
-    if sin_clasificar:
-        logger.warning(
-            "Empresas sin clasificar en MERCADO_POR_EMPRESA (registros descartados): %s",
-            sorted(sin_clasificar),
-        )
-
-    return externo, interno
+# Nombre del campo EMPRESA de Dohler en los registros. La llamada general
+# (sin empresa) no devuelve las exportaciones de Dohler, así que las traemos
+# con una llamada dedicada (empresa=DOHLER63). Para no duplicar, sacamos las
+# filas de Dohler de la llamada general.
+EMPRESA_DOHLER = "DOHLER-TRAPANI ARGENTINA S.A."
 
 
 async def reporte_ventas_industria(
@@ -51,6 +32,7 @@ async def reporte_ventas_industria(
     (
         raw_ventas_cap,
         raw_facturacion,
+        raw_fac_dohler,
         raw_lab,
         raw_stock_arg,
         raw_stock_ext,
@@ -59,8 +41,13 @@ async def reporte_ventas_industria(
         # Mercado Externo — APIVentasCap sin empresa: trae todas las exportaciones
         # en una sola llamada (el parámetro empresa no filtra de verdad y duplicaba datos)
         fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token),
-        # APIAnalisisFacturacion — sin empresa: trae todas, se separan por mercado abajo
+        # APIAnalisisFacturacion sin empresa: trae el grueso de la facturación
         fetch_APIAnalisis_facturacion(fecha_desde, fecha_hasta, access_token),
+        # APIAnalisisFacturacion empresa=DOHLER63: las fibras de Dohler (export
+        # e interno) que la llamada general no devuelve
+        fetch_APIAnalisis_facturacion(
+            fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.DOHLER
+        ),
         # Laboratorio
         fetch_APIAnalisis_laboratorio(access_token),
         # Stock Argentina
@@ -71,14 +58,19 @@ async def reporte_ventas_industria(
         fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.DT),
     )
 
-    raw_fac_me, raw_fac_mi = separar_por_mercado(raw_facturacion)
+    # Combinar facturación: la general SIN las filas de Dohler (para no duplicar)
+    # + la llamada dedicada de Dohler completa.
+    facturacion_general = [
+        r for r in raw_facturacion if r.get("EMPRESA") != EMPRESA_DOHLER
+    ]
+    raw_facturacion_total = facturacion_general + raw_fac_dohler
 
     return ConsolidacionVentasIndustria(
         # Mercado Externo — APIVentasCap
         ventas_cap=parse_finnegans(raw_ventas_cap, APIVentasCapRaw),
-        # APIAnalisisFacturacion separado por mercado
-        fac_me=parse_finnegans(raw_fac_me, APIAnalisisFacturacionRaw),
-        fac_mi=parse_finnegans(raw_fac_mi, APIAnalisisFacturacionRaw),
+        # APIAnalisisFacturacion (general sin Dohler + Dohler dedicada);
+        # el mercado se decide después por tipo de documento en detalle.py
+        facturacion=parse_finnegans(raw_facturacion_total, APIAnalisisFacturacionRaw),
         # Laboratorio
         analisis_lab=parse_finnegans(raw_lab, APIAnalisisLaboratorioRaw),
         # Stock

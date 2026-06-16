@@ -9,11 +9,11 @@ async def fetch_APIAnalisis_facturacion(
     Sin `empresa` trae los registros de todas las empresas juntas.
     """
     params = {
-        "PARAMWEB REPORT_FechaDesde": fecha_desde.strftime("%d-%m-%Y"),
-        "PARAMWEB REPORT_FechaHasta": fecha_hasta.strftime("%d-%m-%Y"),
+        "PARAMWEBREPORT_FechaDesde": fecha_desde.strftime("%Y-%m-%d"),
+        "PARAMWEBREPORT_FechaHasta": fecha_hasta.strftime("%Y-%m-%d"),
     }
     if empresa is not None:
-        params["PARAMWEB REPORT_Empresa"] = empresa
+        params["PARAMWEBREPORT_Empresa"] = empresa
     return await finnegans.get(
         "APIAnalisisFacturacion",
         access_token=access_token,

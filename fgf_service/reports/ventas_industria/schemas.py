@@ -266,9 +266,9 @@ class ConsolidacionVentasIndustria(FinnegansBase):
     # Mercado Externo — APIVentasCap (una sola llamada, sin empresa)
     ventas_cap: list[APIVentasCapRaw]
 
-    # APIAnalisisFacturacion — separado por mercado según el campo EMPRESA
-    fac_me: list[APIAnalisisFacturacionRaw]
-    fac_mi: list[APIAnalisisFacturacionRaw]
+    # APIAnalisisFacturacion (general sin Dohler + llamada dedicada de Dohler);
+    # el mercado se decide por tipo de documento en detalle.py
+    facturacion: list[APIAnalisisFacturacionRaw]
 
     # Laboratorio
     analisis_lab: list[APIAnalisisLaboratorioRaw]
