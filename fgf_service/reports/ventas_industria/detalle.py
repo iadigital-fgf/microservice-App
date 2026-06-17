@@ -24,11 +24,25 @@ COLUMNAS_DETALLE = [
 ]
 
 
-def _toneladas(cantidad: float | None, unidad: str | None) -> float:
-    """Convierte la cantidad a toneladas: si viene en kilos, divide por 1000."""
+def _es_nota_credito(tipo_documento: str | None) -> bool:
+    """True si el renglón es una nota de crédito (devolución)."""
+    return "nota de cr" in (tipo_documento or "").lower()
+
+
+def _toneladas(
+    cantidad: float | None, unidad: str | None, tipo_documento: str | None = None
+) -> float:
+    """Convierte la cantidad a toneladas: si viene en kilos, divide por 1000.
+
+    Las notas de crédito NO cuentan en toneladas (devuelven 0): Marco mide las
+    toneladas efectivamente despachadas (solo facturas) e ignora las NC para la
+    cantidad. En el dólar sí netean (vienen negativas), pero en TN no.
+    """
+    if _es_nota_credito(tipo_documento):
+        return 0.0
     cantidad = cantidad or 0.0
     if (unidad or "").strip().lower() == "kilos":
-        return cantidad / 1000
+        cantidad = cantidad / 1000
     return cantidad
 
 
@@ -53,7 +67,7 @@ def detalle_ventas_cap(registros: list[APIVentasCapRaw]) -> pd.DataFrame:
             "familia": r.familia,
             "subfamilia": None,
             "usd": r.totalfob or 0.0,
-            "tn": _toneladas(r.cantidadstock2, r.unidadstock2),
+            "tn": _toneladas(r.cantidadstock2, r.unidadstock2, r.transacconsubtiponombre),
         })
     return pd.DataFrame(filas, columns=COLUMNAS_DETALLE)
 
@@ -85,7 +99,7 @@ def detalle_facturacion(registros: list[APIAnalisisFacturacionRaw]) -> pd.DataFr
             "familia": r.familia,
             "subfamilia": r.subfamilia,
             "usd": usd or 0.0,
-            "tn": _toneladas(r.cantidadstock2, r.unidadstock2),
+            "tn": _toneladas(r.cantidadstock2, r.unidadstock2, r.transacconsubtiponombre),
         })
     return pd.DataFrame(filas, columns=COLUMNAS_DETALLE)
 

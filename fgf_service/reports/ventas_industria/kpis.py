@@ -9,6 +9,7 @@ qué filas entran a cada mercado y cómo se evita el doble conteo entre
 APIVentasCap y APIAnalisisFacturacion.
 """
 
+import numpy as np
 import pandas as pd
 
 from fgf_service.core.segmentos import SEGMENTOS_EXCLUIDOS_KPIS
@@ -45,7 +46,7 @@ def _resumir(df: pd.DataFrame) -> pd.DataFrame:
         .agg(ventas_usd=("usd", "sum"), ventas_tn=("tn", "sum"))
     )
     resumen["precio_usd_tn"] = (
-        resumen["ventas_usd"] / resumen["ventas_tn"].replace(0, pd.NA)
+        resumen["ventas_usd"] / resumen["ventas_tn"].replace(0, np.nan)
     ).round(2)
     resumen["ventas_usd"] = resumen["ventas_usd"].round(2)
     resumen["ventas_tn"] = resumen["ventas_tn"].round(2)
@@ -124,6 +125,6 @@ def kpis_total(me: pd.DataFrame, mi: pd.DataFrame) -> pd.DataFrame:
         .agg(ventas_usd=("ventas_usd", "sum"), ventas_tn=("ventas_tn", "sum"))
     )
     total["precio_usd_tn"] = (
-        total["ventas_usd"] / total["ventas_tn"].replace(0, pd.NA)
+        total["ventas_usd"] / total["ventas_tn"].replace(0, np.nan)
     ).round(2)
     return total

@@ -79,24 +79,42 @@ ACEITE DE SEMILLA va a ACEITES. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPI
 - **ME**: USD y TN de VentasCap, EXCEPTO fibras → USD de Dohler, TN de VentasCap.
 - **MI**: solo FGF TRAPANI S.A. + fibras Dohler.
 - **TN** = `cantidadstock2`/1000 si `unidadstock2`=="Kilos".
+- **Notas de crédito**: en USD netean (vienen negativas, se incluyen); en TN
+  NO cuentan (devuelven 0). Se detectan por `transacconsubtiponombre` que
+  contiene "nota de cr". (`_es_nota_credito` / `_toneladas` en detalle.py.)
+- División de precio usa `np.nan` (no `pd.NA`) para soportar `.round()` cuando TN=0.
 - Formato final (solo endpoint reporte): entero (regla 50) + miles con punto.
   El detalle queda numérico (Marco lo formatea en Excel).
 
-## Estado de validación (al 2026-06-16, contra Excel 03/06)
+## Estado de validación (al 2026-06-17, contra Excel 03/06)
 
-Mercado Externo USD: ACEITES, CASCARAS, FIBRAS, JUGOS CONCENTRADOS, JUGOS NFC
-dan EXACTO. Falta JUGOS TOP (da 266k vs 420k esperado).
+**Mercado Externo: VALIDADO (USD, TN y precio) en ACEITES, CASCARAS, FIBRAS,
+JUGOS CONCENTRADOS, JUGOS NFC.** Único pendiente del ME: JUGOS TOP.
 
 ## Pendientes (próxima sesión, en orden)
 
-1. **JUGOS TOP**: gap de ~154k. Filas existentes están bien (positivas,
-   clasificadas, sin NC). Faltan filas → cruzar qué productos cuenta Marco
-   como "JUGO LIMON TOP" que nosotros no.
-2. **TN finas**: dan un poco altas (ACEITES, CASCARAS, CONC, NFC). Causa
-   probable: notas de crédito. La fórmula TN es idéntica a Marco; revisar signos/NC.
-3. **Mercado Interno**: validar contra Excel (hay un OTROS de ~1,8M que se cuela).
-4. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
+1. **JUGOS TOP** (único del ME): gap de ~154k. Filas existentes bien (positivas,
+   clasificadas, sin NC). Faltan filas → Marco tiene más filas de TOP que nuestra
+   llamada. Verificado: nuestra suma del detalle (266.453) = nuestro KPI, o sea
+   el código suma bien; el problema es la fuente de datos. Cruzar qué productos/
+   filas cuenta Marco como "JUGO LIMON TOP" que a nosotros no nos llegan.
+2. **Mercado Interno**: validar contra Excel. Bug conocido: OTROS da ~1,8M porque
+   se cuelan líneas que NO son productos (anticipos, gastos, fletes, descuentos,
+   demurrage). Fix propuesto (NO aplicado aún): excluir de KPIs los conceptos
+   no-producto detectándolos por palabras en el nombre (Gasto, Anticipo, Servicio,
+   Flete, Recupero, Reembolso, Descuento, Demurrage, Bonific, Comisión).
+3. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
    Marco cuenta solo lo vendible + warrant activo.
+
+## Cómo verificar un KPI a mano (para Agustín)
+
+El detalle ES la materia prima del KPI. Para comprobar cualquier número:
+en Excel → Datos → Power Query → Nuevo origen → Web → pegar la URL de
+`/detalle/ventas` (con access_token) → "En la tabla" → expandir columnas →
+poner usd/tn como Número decimal → Cerrar y cargar → Tabla dinámica
+(segmento en Filas, usd en Valores). OJO: el detalle tiene TODAS las filas;
+para igualar un KPI hay que filtrar con la misma receta (ej. ME = mercado
+externo + fuente APIVentasCap).
 - Redis + APScheduler (refresh diario 6am) — diferido.
 - Presupuesto (Excel manual del área comercial, NO viene de API) — diferido.
 - Datos históricos 2025 — diferido.
