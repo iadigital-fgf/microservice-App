@@ -41,10 +41,13 @@ def asignar_segmento(
 ) -> str:
     """Devuelve el segmento comercial de un registro.
 
-    Cadena de tres intentos, de más preciso a más general:
-    1. Por nombre de producto exacto (la tabla oficial Producto-Segmento).
-    2. Por familia + subfamilia fabril (el mapeo del Excel de stock).
-    3. SIN CLASIFICAR, para que el registro no se pierda y quede visible.
+    Cadena, de más autoritativa a más general:
+    1. Familia de Finnegans en FAMILIAS_OTROS → OTROS (gana sobre la tabla:
+       la tabla de Marco tiene mal cargados productos como ESENCIA y TERPENO
+       en ACEITE; la familia de Finnegans es la fuente real).
+    2. Por nombre de producto exacto (la tabla oficial Producto-Segmento).
+    3. Por familia + subfamilia fabril (el mapeo del Excel de stock).
+    4. SIN CLASIFICAR, para que el registro no se pierda y quede visible.
     """
     # Import acá adentro para evitar import circular y porque la tabla es grande
     from fgf_service.core.productos import SEGMENTO_POR_PRODUCTO
@@ -53,17 +56,19 @@ def asignar_segmento(
     familia = (familia or "").strip().upper()
     subfamilia = (subfamilia or "").strip().upper()
 
-    # 1) por producto (clasificación oficial)
+    # 1) familia de Finnegans que va a OTROS (prioridad sobre la tabla)
+    if familia in FAMILIAS_OTROS:
+        return "OTROS"
+
+    # 2) por producto (clasificación oficial)
     segmento = SEGMENTO_POR_PRODUCTO.get(producto)
     if segmento:
         return segmento
 
-    # 2) por familia + subfamilia fabril
-    if familia in FAMILIAS_OTROS:
-        return "OTROS"
+    # 3) por familia + subfamilia fabril
     segmento = SEGMENTO_POR_FAMILIA_SUBFAMILIA.get((familia, subfamilia))
     if segmento:
         return segmento
 
-    # 3) red de seguridad
+    # 4) red de seguridad
     return SIN_CLASIFICAR

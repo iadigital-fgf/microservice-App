@@ -91,19 +91,31 @@ ACEITE DE SEMILLA va a ACEITES. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPI
 **Mercado Externo: VALIDADO (USD, TN y precio) en ACEITES, CASCARAS, FIBRAS,
 JUGOS CONCENTRADOS, JUGOS NFC.** Único pendiente del ME: JUGOS TOP.
 
+## Estado ME: VALIDADO (al 2026-06-18)
+
+Los 6 segmentos del ME dan exacto con `fecha_hasta=2026-06-03` (la fecha del Excel
+de Marco). JUGOS TOP era un tema de fecha de corte (el 03/06 hubo ventas de Top
+que el 02/06 no incluía), no un bug. Único matiz: ESENCIA y TERPENO ahora van a
+OTROS (su familia real en Finnegans), no a ACEITES. Esto hace que ACEITES USD
+(~4.827.862) y OTROS difieran del reporte ACTUAL de Marco, que tiene esos productos
+mal clasificados como ACEITE en su tabla Producto-Segmento.
+
 ## Pendientes (próxima sesión, en orden)
 
-1. **JUGOS TOP** (único del ME): gap de ~154k. Filas existentes bien (positivas,
-   clasificadas, sin NC). Faltan filas → Marco tiene más filas de TOP que nuestra
-   llamada. Verificado: nuestra suma del detalle (266.453) = nuestro KPI, o sea
-   el código suma bien; el problema es la fuente de datos. Cruzar qué productos/
-   filas cuenta Marco como "JUGO LIMON TOP" que a nosotros no nos llegan.
-2. **Mercado Interno**: validar contra Excel. Bug conocido: OTROS da ~1,8M porque
+1. **CONFIRMAR CON MARCO** (bloqueante para cerrar ME al 100%): su tabla
+   Producto-Segmento clasifica ESENCIA y TERPENO como ACEITE, pero Finnegans
+   (campo FAMILIA) dice ESENCIA/TERPENO. Nosotros ya los pusimos en OTROS
+   (correcto). Marco debe corregir su tabla (esos productos → OTROS) para que su
+   reporte coincida con el nuestro en ACEITES USD y OTROS. Su reporte hoy es
+   inconsistente (USD los cuenta en ACEITES, TN no).
+2. **FIBRAS** residuo chico: USD 683.928 vs 683.538 (−390). Revisar si es NC o
+   una fila de borde.
+3. **Mercado Interno**: validar contra Excel. Bug conocido: OTROS da ~1,8M porque
    se cuelan líneas que NO son productos (anticipos, gastos, fletes, descuentos,
    demurrage). Fix propuesto (NO aplicado aún): excluir de KPIs los conceptos
    no-producto detectándolos por palabras en el nombre (Gasto, Anticipo, Servicio,
    Flete, Recupero, Reembolso, Descuento, Demurrage, Bonific, Comisión).
-3. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
+4. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
    Marco cuenta solo lo vendible + warrant activo.
 
 ## Cómo verificar un KPI a mano (para Agustín)

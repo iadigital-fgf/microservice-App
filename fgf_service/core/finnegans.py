@@ -30,7 +30,7 @@ class FinnegansClient:
         url = f"{self.base_url}{path.lstrip('/')}"
         auth_params = self._auth_params(access_token, params)
 
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with httpx.AsyncClient(timeout=600) as client:
             response = await client.get(url, params=auth_params)
             response.raise_for_status()
             return response.json()
