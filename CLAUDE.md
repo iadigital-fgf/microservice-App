@@ -108,8 +108,10 @@ subfamilia, 4) SIN CLASIFICAR. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPIs
 ## Estado de validación (al 2026-06-19, contra Excel 03/06, `fecha_hasta=2026-06-03`)
 
 - **Mercado Externo: VALIDADO** los 6 segmentos (USD, TN, precio).
-- **Mercado Interno: validado** salvo detalles: ACEITES, CASCARAS, JUGOS TOP,
-  OTROS, FIBRAS dan bien; JUGOS CONCENTRADOS queda −13k (a revisar).
+- **Mercado Interno: casi validado.** Dan bien: ACEITES, CASCARAS, JUGOS TOP,
+  OTROS, JUGOS NFC (este último: nuestro número es el correcto, Marco omitió 2
+  ventas). Faltan: JUGOS CONCENTRADOS (−13k) y FIBRAS MI (+58k, en investigación
+  —ver Pendientes—; NO es fecha).
 
 **Quirks del reporte de Marco** (nuestro número es más correcto; confirmar con él):
 - ESENCIA/TERPENO: su tabla los pone en ACEITE, Finnegans dice ESENCIA/TERPENO
@@ -119,14 +121,45 @@ subfamilia, 4) SIN CLASIFICAR. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPIs
 
 ## Pendientes (próxima sesión)
 
-1. **JUGOS CONCENTRADOS MI**: gap −13k (96.677 vs 109.370). Revisar con el detalle.
-2. **Confirmar quirks con Marco** (esencia/terpeno, fibra de Dohler como neto).
-3. **Stock**: filtrar por estado "disponible" (estadocalidad/estadocomex); Marco
+Diferencias finas del MI 2026:
+1. **JUGOS NFC MI** — RESUELTO: **nuestro número es el correcto**. Marco no
+   contempló 2 ventas en su reporte; el cálculo nuestro está bien.
+2. **JUGOS CONCENTRADOS MI** — gap −13k (96.677 vs 109.370). A revisar con el detalle.
+3. **FIBRAS MI** — nuestro ~221.669 vs 163.659 de Marco (+58k). Investigación hecha:
+   - Confirmado que **NUESTRO número netea bien**: todos los rows de Dohler tienen
+     EMPRESA="DOHLER-TRAPANI ARGENTINA S.A." (incluidos NC y costos negativos), así
+     que `es_dohler` los agarra y restan correctamente.
+   - Datos crudos de Marco (hoja `AnalisisFacturasVentas-A DTARG`): interno 2026 =
+     **163.659 exacto**, meses Ene/Mar/Abr/May (sin Feb ni Jun). Por DOCUMENTO:
+     Factura MI 174.257 + Liquido Producto 28.686 − NC 39.284 = 163.659.
+   - **NO es fecha**: se corrió con `fecha_hasta=2026-05-31` y SIGUE sin dar (~221k).
+   - **Falta investigar**: por qué nuestra llamada DOHLER63 en vivo (a 31/05) suma
+     más que la hoja DTARG de Marco (163.659). Sospechas a chequear: (a) doble conteo
+     —los rows de Dohler podrían venir en la llamada general Y en la dedicada, revisar
+     el dedup en service.py—; (b) la dinámica DTARG de Marco filtra algo que nosotros
+     no (¿FAMILIA=FIBRA, excluye la línea de jugo o ciertos docs?); (c) nuestra llamada
+     trae más registros que su snapshot. Comparar el detalle FIBRAS interno (fuente
+     Dohler) fila por fila contra la hoja DTARG.
+   - Aparte: administración anotó una venta de JUGO como FIBRA (dato mal cargado en
+     Finnegans). Con "todo Dohler = fibra" ese jugo entra igual (como en Marco).
+
+Otros pendientes:
+4. **Stock**: filtrar por estado "disponible" (estadocalidad/estadocomex); Marco
    cuenta solo lo vendible + warrant activo.
-4. **Cache (Redis + scheduler)**: clave para escalar/velocidad. El año anterior es
+5. **Cache (Redis + scheduler)**: clave para escalar/velocidad. El año anterior es
    histórico (no cambia) → ideal para cachear. Hoy el reporte trae 2 años en vivo
    (lento, ~3 min). Diferido pero importante.
-5. Presupuesto (Excel manual, no API), históricos guardados, front propio — diferidos.
+6. Presupuesto (Excel manual, no API), históricos guardados, front propio — diferidos.
+
+## ACLARACIONES (confirmado con Marco / hallazgos manuales)
+
+- **ESENCIA y TERPENO → OTROS, CONFIRMADO**: Marco confirmó que son **derivados
+  del aceite** y van clasificados en OTROS (no en ACEITES). Nuestra clasificación
+  ya es la correcta. (Antes era "quirk a confirmar"; ya está confirmado.)
+- **Hay 3 tipos de llamada a APIAnalisisFacturacion** según `empresa`:
+  `DOHLER63`, `EMPRE01` (FGF Trapani) y `TGT61`. Importante: detectar bien dónde
+  se usa cada una (hoy usamos la general sin empresa + la dedicada DOHLER63).
+- **Charlas con marco**: "Los movimientos intercompany entre dohler y fgf si cuentan en el reporte."
 
 ## Cómo verificar un KPI a mano (para Agustín)
 
