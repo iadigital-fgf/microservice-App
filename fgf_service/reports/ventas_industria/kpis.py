@@ -86,17 +86,26 @@ def kpis_mercado_externo(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
 def kpis_mercado_interno(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
     """KPIs de ventas locales.
 
-    Receta: solo la sociedad principal (FGF Trapani) + las fibras locales
-    de Dohler. Las demás sociedades del grupo quedan fuera de este bloque
-    (igual que en el reporte de Marco), visibles en el detalle.
+    Receta (la de Marco):
+    - No-fibra: ventas locales de FGF Trapani (a clientes externos; el
+      intercompany ya quedó excluido en detalle.py).
+    - FIBRAS: solo lo que vende Dohler (la fibra se vende desde Dohler,
+      incluso cuando le factura a FGF; eso es venta real de fibra).
 
-    Los USD de estas filas ya vienen de importemonsecundaria (la factura
-    en pesos convertida a USD), asignado en detalle.py.
+    Los USD ya vienen de importemonsecundaria, asignado en detalle.py.
     """
-    interno = (detalle_ventas["mercado"] == "interno") & (
-        detalle_ventas["empresa"].isin([EMPRESA_MI, EMPRESA_FIBRAS_ME])
+    es_interno = detalle_ventas["mercado"] == "interno"
+    no_fibra = (
+        es_interno
+        & (detalle_ventas["empresa"] == EMPRESA_MI)
+        & (detalle_ventas["segmento"] != "FIBRAS")
     )
-    return _resumir(_solo_industria(detalle_ventas[interno]))
+    fibra = (
+        es_interno
+        & (detalle_ventas["empresa"] == EMPRESA_FIBRAS_ME)
+        & (detalle_ventas["segmento"] == "FIBRAS")
+    )
+    return _resumir(_solo_industria(detalle_ventas[no_fibra | fibra]))
 
 
 def kpis_stock(detalle_stock: pd.DataFrame) -> pd.DataFrame:

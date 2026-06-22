@@ -54,83 +54,87 @@ Parámetros `empresa` para otras APIs (códigos en core/empresas.py):
 - APIVentasCap (mercado externo): `CAPACITACION43` (todo ME excepto fibra) + `DOHLER63` (fibra).
 - APIStockProdIndustria: `EMPRE01` (ARG) + `CAPACITACION43` (EXT) + `DOHLER63` (DT).
 
-## Reporte ventas_industria — arquitectura del cálculo
+## Reporte ventas_industria — arquitectura
 
-Flujo: connectors → service (trae datos) → detalle.py (traduce + apila) →
-kpis.py (suma por segmento) → router.py (3 endpoints, formatea el final).
+Flujo: connectors → `service.py` (trae datos de Finnegans) → `detalle.py`
+(traduce cada API al idioma común + apila + clasifica mercado/segmento) →
+`kpis.py` (suma por segmento) → `armado.py` (comparación año anterior +
+estructura sectorizada) → `router.py` (solo endpoints).
 
-**Segmento** = familia comercial del reporte (ACEITES, CASCARAS, FIBRAS,
-JUGOS CONCENTRADOS, JUGOS NFC, JUGOS TOP, OTROS). Se asigna en `core/segmentos.py`
-con cadena: 1) tabla exacta producto→segmento (`core/productos.py`, generada del
-Excel hoja Producto-Segmento), 2) familia+subfamilia, 3) SIN CLASIFICAR.
-ACEITE DE SEMILLA va a ACEITES. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPIs.
+Carpetas: `core/` (empresas, segmentos, productos, finnegans, config — dominio
+compartido), `connectors/` (1 archivo por API), `helpers/` (genéricos: parsers),
+`reports/ventas_industria/` (TODO lo específico de este reporte).
+
+**Respuesta del reporte** (3 mercados, cada uno sectorizado):
+```
+mercado_externo / mercado_interno / total:
+  anio_actual:   [{segmento, ventas_usd, ventas_tn, precio_usd_tn, stock_tn}]
+  anio_anterior: [{segmento, ventas_real_usd, precio_fob_real, var_usd, var_precio}]
+```
+Año anterior = mismo período −1 año (derivado solo, `armado.menos_un_anio`).
+VAR = actual/anterior (ratio). El año anterior NO lleva ventas_tn ni stock_tn.
+
+**Segmento** = familia comercial (ACEITES, CASCARAS, FIBRAS, JUGOS CONCENTRADOS,
+JUGOS NFC, JUGOS TOP, OTROS). `core/segmentos.py`: 1) familia Finnegans en
+FAMILIAS_OTROS (ESENCIA/TERPENO/etc) → OTROS (gana sobre la tabla de Marco que
+los tiene mal), 2) tabla producto→segmento (`core/productos.py`), 3) familia+
+subfamilia, 4) SIN CLASIFICAR. FRUTA FRESCA y SIN CLASIFICAR se excluyen de KPIs.
 
 **Reglas de negocio descubiertas (críticas):**
-- **Parámetros API SIN espacio y fecha YYYY-MM-DD**: `PARAMWEBREPORT_Empresa`,
-  `PARAMWEBREPORT_FechaDesde/Hasta`. Con espacio la API los IGNORA (no filtra
-  empresa ni fecha). Fue la causa de fibras, fechas y stock triplicado.
-- **Mercado por tipo de documento, NO por empresa**: si `transacconsubtiponombre`
-  contiene "Exportación" → externo (usa `fobtotal`); si no → interno
-  (usa `importemonsecundaria`). Una misma empresa factura export e interno.
-- **VentasCap se llama SIN empresa** (1 sola vez, trae todas las exportaciones).
-- **Dohler (fibras) necesita llamada dedicada** `empresa=DOHLER63`; la llamada
-  general no trae sus exportaciones. Se sacan las filas Dohler de la general
-  para no duplicar.
+- **Parámetros API SIN espacio y fecha YYYY-MM-DD** (`PARAMWEBREPORT_Empresa`,
+  `PARAMWEBREPORT_FechaDesde/Hasta`). Con espacio la API los IGNORA → causaba
+  fibras/fechas/stock mal.
+- **Mercado por tipo de documento** (`transacconsubtiponombre`): "Exportación" →
+  externo (`fobtotal`); "Mercado Interno"/"(MI" → interno (`importemonsecundaria`);
+  cualquier otra cosa → "otro" (intercompany, líquido producto, otras empresas →
+  fuera de KPIs). "todo lo que no es export = interno" era demasiado amplio.
+- **VentasCap se llama SIN empresa**; **Dohler** necesita llamada dedicada
+  `empresa=DOHLER63` (se sacan las filas Dohler de la general para no duplicar).
 - **ME**: USD y TN de VentasCap, EXCEPTO fibras → USD de Dohler, TN de VentasCap.
-- **MI**: solo FGF TRAPANI S.A. + fibras Dohler.
+- **MI**: no-fibra = FGF TRAPANI S.A. (clientes externos); FIBRAS = Dohler.
+- **Intercompany**: venta a empresa del grupo (`es_cliente_del_grupo`) → excluida.
+  EXCEPCIÓN Dohler: sus ventas SÍ cuentan (la fibra se vende desde Dohler, incluso
+  a FGF). Ojo: "Dohler Trapani ARGENTINA" es del grupo; "Dohler NETHERLANDS" no.
+- **Dohler = fibra**: TODO lo de Dohler es FIBRAS (ventas, costos/gastos negativos
+  que restan, e incluso una línea de jugo). Así cierra el neto de Marco (163.659).
+  Y Dohler-no-export → interno (incluye docs "Liquido Producto").
+- **Notas de crédito**: en USD netean (negativas, se incluyen); en TN NO cuentan
+  (0). Detectadas por "nota de cr" en el doc.
 - **TN** = `cantidadstock2`/1000 si `unidadstock2`=="Kilos".
-- **Notas de crédito**: en USD netean (vienen negativas, se incluyen); en TN
-  NO cuentan (devuelven 0). Se detectan por `transacconsubtiponombre` que
-  contiene "nota de cr". (`_es_nota_credito` / `_toneladas` en detalle.py.)
-- División de precio usa `np.nan` (no `pd.NA`) para soportar `.round()` cuando TN=0.
-- Formato final (solo endpoint reporte): entero (regla 50) + miles con punto.
-  El detalle queda numérico (Marco lo formatea en Excel).
+- División de precio usa `np.nan` (no `pd.NA`) para `.round()` cuando TN=0.
+- API devuelve NÚMEROS (no texto). El formato visual va en el consumidor
+  (Excel formato de celda, front `toLocaleString`, Power BI locale).
 
-## Estado de validación (al 2026-06-17, contra Excel 03/06)
+## Estado de validación (al 2026-06-19, contra Excel 03/06, `fecha_hasta=2026-06-03`)
 
-**Mercado Externo: VALIDADO (USD, TN y precio) en ACEITES, CASCARAS, FIBRAS,
-JUGOS CONCENTRADOS, JUGOS NFC.** Único pendiente del ME: JUGOS TOP.
+- **Mercado Externo: VALIDADO** los 6 segmentos (USD, TN, precio).
+- **Mercado Interno: validado** salvo detalles: ACEITES, CASCARAS, JUGOS TOP,
+  OTROS, FIBRAS dan bien; JUGOS CONCENTRADOS queda −13k (a revisar).
 
-## Estado ME: VALIDADO (al 2026-06-18)
+**Quirks del reporte de Marco** (nuestro número es más correcto; confirmar con él):
+- ESENCIA/TERPENO: su tabla los pone en ACEITE, Finnegans dice ESENCIA/TERPENO
+  → nosotros OTROS. Su reporte es inconsistente (USD en ACEITES, TN no).
+- FIBRAS ME: nuestro 683.928 vs 683.538 — su hoja de fibra está refrescada solo
+  hasta mayo; nuestro número (incluye 1-3 jun) está más actualizado.
 
-Los 6 segmentos del ME dan exacto con `fecha_hasta=2026-06-03` (la fecha del Excel
-de Marco). JUGOS TOP era un tema de fecha de corte (el 03/06 hubo ventas de Top
-que el 02/06 no incluía), no un bug. Único matiz: ESENCIA y TERPENO ahora van a
-OTROS (su familia real en Finnegans), no a ACEITES. Esto hace que ACEITES USD
-(~4.827.862) y OTROS difieran del reporte ACTUAL de Marco, que tiene esos productos
-mal clasificados como ACEITE en su tabla Producto-Segmento.
+## Pendientes (próxima sesión)
 
-## Pendientes (próxima sesión, en orden)
-
-1. **CONFIRMAR CON MARCO** (bloqueante para cerrar ME al 100%): su tabla
-   Producto-Segmento clasifica ESENCIA y TERPENO como ACEITE, pero Finnegans
-   (campo FAMILIA) dice ESENCIA/TERPENO. Nosotros ya los pusimos en OTROS
-   (correcto). Marco debe corregir su tabla (esos productos → OTROS) para que su
-   reporte coincida con el nuestro en ACEITES USD y OTROS. Su reporte hoy es
-   inconsistente (USD los cuenta en ACEITES, TN no).
-2. **FIBRAS** residuo chico: USD 683.928 vs 683.538 (−390). Revisar si es NC o
-   una fila de borde.
-3. **Mercado Interno**: validar contra Excel. Bug conocido: OTROS da ~1,8M porque
-   se cuelan líneas que NO son productos (anticipos, gastos, fletes, descuentos,
-   demurrage). Fix propuesto (NO aplicado aún): excluir de KPIs los conceptos
-   no-producto detectándolos por palabras en el nombre (Gasto, Anticipo, Servicio,
-   Flete, Recupero, Reembolso, Descuento, Demurrage, Bonific, Comisión).
-4. **Stock**: filtrar por estado "disponible" (campos estadocalidad/estadocomex);
-   Marco cuenta solo lo vendible + warrant activo.
+1. **JUGOS CONCENTRADOS MI**: gap −13k (96.677 vs 109.370). Revisar con el detalle.
+2. **Confirmar quirks con Marco** (esencia/terpeno, fibra de Dohler como neto).
+3. **Stock**: filtrar por estado "disponible" (estadocalidad/estadocomex); Marco
+   cuenta solo lo vendible + warrant activo.
+4. **Cache (Redis + scheduler)**: clave para escalar/velocidad. El año anterior es
+   histórico (no cambia) → ideal para cachear. Hoy el reporte trae 2 años en vivo
+   (lento, ~3 min). Diferido pero importante.
+5. Presupuesto (Excel manual, no API), históricos guardados, front propio — diferidos.
 
 ## Cómo verificar un KPI a mano (para Agustín)
 
-El detalle ES la materia prima del KPI. Para comprobar cualquier número:
-en Excel → Datos → Power Query → Nuevo origen → Web → pegar la URL de
-`/detalle/ventas` (con access_token) → "En la tabla" → expandir columnas →
-poner usd/tn como Número decimal → Cerrar y cargar → Tabla dinámica
-(segmento en Filas, usd en Valores). OJO: el detalle tiene TODAS las filas;
-para igualar un KPI hay que filtrar con la misma receta (ej. ME = mercado
-externo + fuente APIVentasCap).
-- Redis + APScheduler (refresh diario 6am) — diferido.
-- Presupuesto (Excel manual del área comercial, NO viene de API) — diferido.
-- Datos históricos 2025 — diferido.
-- Front propio para Marco — diferido (Excel de depuración sobre /detalle alcanza).
+El detalle ES la materia prima del KPI. En Excel → Datos → Power Query → Nuevo
+origen → Web → URL de `/detalle/ventas` (con access_token) → "En la tabla" →
+expandir columnas → usd/tn como Número decimal → Cerrar y cargar → Tabla dinámica.
+OJO: el detalle tiene TODAS las filas; para igualar un KPI hay que filtrar con la
+receta (ej. ME = mercado externo + fuente APIVentasCap).
 
 ## Referencias
 

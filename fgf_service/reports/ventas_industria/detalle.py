@@ -7,6 +7,7 @@ viene con valores negativos y resta sola al sumar).
 
 import pandas as pd
 
+from fgf_service.core.empresas import EMPRESA_DOHLER, es_cliente_del_grupo
 from fgf_service.core.segmentos import asignar_segmento
 from fgf_service.reports.ventas_industria.schemas import (
     APIVentasCapRaw,
@@ -72,24 +73,56 @@ def detalle_ventas_cap(registros: list[APIVentasCapRaw]) -> pd.DataFrame:
     return pd.DataFrame(filas, columns=COLUMNAS_DETALLE)
 
 
+def _mercado_documento(tipo_documento: str | None) -> str:
+    """Clasifica el mercado por el TIPO DE DOCUMENTO (transacconsubtiponombre).
+
+    - "Exportación" → externo
+    - "Mercado Interno" o "(MI ..." → interno
+    - cualquier otra cosa → "otro" (intercompany, otras empresas, líquido
+      producto, etc.; NO entra a los KPIs de ME ni MI, pero queda en el detalle)
+
+    Marco cuenta como mercado interno SOLO los documentos marcados como tal;
+    "todo lo que no es exportación" sería demasiado amplio.
+    """
+    doc = (tipo_documento or "").lower()
+    if "exporta" in doc:
+        return "externo"
+    if "mercado interno" in doc or "(mi " in doc:
+        return "interno"
+    return "otro"
+
+
 def detalle_facturacion(registros: list[APIAnalisisFacturacionRaw]) -> pd.DataFrame:
     """Renglones de APIAnalisisFacturacion → formato común.
 
-    El mercado se decide por el TIPO DE DOCUMENTO (transacconsubtiponombre):
-    si dice "Exportación" es externo y los USD salen de fobtotal; si no,
-    es interno y los USD salen de importemonsecundaria (la factura en pesos
-    convertida a USD). Es el mismo criterio que usa Marco en su Excel:
-    una misma empresa emite facturas de exportación y de mercado interno.
+    El mercado se decide por el tipo de documento (ver `_mercado_documento`).
+    USD: externo usa fobtotal; el resto usa importemonsecundaria (la factura
+    en pesos convertida a USD).
     """
     filas = []
     for r in registros:
-        es_export = "exporta" in (r.transacconsubtiponombre or "").lower()
-        mercado = "externo" if es_export else "interno"
-        usd = r.fobtotal if es_export else r.importemonsecundaria
+        mercado = _mercado_documento(r.transacconsubtiponombre)
+        es_dohler = (r.empresa or "").strip().upper() == EMPRESA_DOHLER
+        # Dohler solo hace fibra: todo lo que NO es exportación es mercado
+        # interno (incluye los documentos "Liquido Producto", etc.).
+        if es_dohler and mercado == "otro":
+            mercado = "interno"
+        # Venta a otra empresa del grupo → intercompany (no entra a los KPIs,
+        # pero queda visible en el detalle para auditar).
+        # EXCEPCIÓN: las ventas de Dohler NO se excluyen — su venta a FGF es
+        # una venta real de fibra (la fibra se vende desde Dohler).
+        if es_cliente_del_grupo(r.cliente) and not es_dohler:
+            mercado = "intercompany"
+        usd = r.fobtotal if mercado == "externo" else r.importemonsecundaria
+        # Dohler solo hace fibra: TODO lo suyo es FIBRAS (ventas, costos y
+        # gastos negativos que restan, etc.). Así cierra el neto como Marco.
+        segmento = "FIBRAS" if es_dohler else asignar_segmento(
+            r.familia, r.subfamilia, r.producto
+        )
         filas.append({
             "fuente": "APIAnalisisFacturacion",
             "mercado": mercado,
-            "segmento": asignar_segmento(r.familia, r.subfamilia, r.producto),
+            "segmento": segmento,
             "fecha": r.fecha,
             "comprobante": r.comprobante,
             "transaccionid": r.transaccionid,
