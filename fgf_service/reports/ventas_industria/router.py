@@ -39,11 +39,30 @@ async def reporte_final(fecha_desde: date, fecha_hasta: date, access_token: str)
 
 
 @router.get("/detalle/ventas")
-async def detalle_ventas(fecha_desde: date, fecha_hasta: date, access_token: str):
+async def detalle_ventas(
+    fecha_desde: date,
+    fecha_hasta: date,
+    access_token: str,
+    segmento: str | None = None,
+    mercado: str | None = None,
+    empresa: str | None = None,
+):
     """Renglones de factura apilados (VentasCap + Facturación), fila por fila,
-    con fuente, mercado y segmento asignados. Para depurar datos."""
+    con fuente, mercado y segmento asignados. Para depurar datos.
+
+    Filtros opcionales (para no traer todo y que Excel no se cuelgue):
+    - segmento: exacto (ej. "FIBRAS")
+    - mercado: exacto (ej. "interno")
+    - empresa: coincidencia parcial, sin distinguir mayúsculas (ej. "DOHLER")
+    """
     datos = await reporte_ventas_industria(fecha_desde, fecha_hasta, access_token)
     ventas = apilar_detalle_ventas(datos.ventas_cap, datos.facturacion)
+    if segmento:
+        ventas = ventas[ventas["segmento"] == segmento]
+    if mercado:
+        ventas = ventas[ventas["mercado"] == mercado]
+    if empresa:
+        ventas = ventas[ventas["empresa"].str.contains(empresa, case=False, na=False)]
     return ventas.to_dict(orient="records")
 
 

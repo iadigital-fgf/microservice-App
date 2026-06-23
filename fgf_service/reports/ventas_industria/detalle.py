@@ -8,7 +8,11 @@ viene con valores negativos y resta sola al sumar).
 import pandas as pd
 
 from fgf_service.core.empresas import EMPRESA_DOHLER, es_cliente_del_grupo
-from fgf_service.core.segmentos import asignar_segmento
+from fgf_service.core.segmentos import (
+    NO_PRODUCTO,
+    asignar_segmento,
+    es_concepto_no_producto,
+)
 from fgf_service.reports.ventas_industria.schemas import (
     APIVentasCapRaw,
     APIAnalisisFacturacionRaw,
@@ -87,7 +91,11 @@ def _mercado_documento(tipo_documento: str | None) -> str:
     doc = (tipo_documento or "").lower()
     if "exporta" in doc:
         return "externo"
-    if "mercado interno" in doc or "(mi " in doc:
+    # "Mercado Interno"/"(MI ..." y TODOS los documentos FCE (Factura de Crédito
+    # Electrónica, tipo doméstico argentino: facturas, notas de crédito y débito)
+    # son mercado interno. Incluir las NC de la FCE es clave para que las
+    # devoluciones resten (si no, el interno queda inflado).
+    if "mercado interno" in doc or "(mi " in doc or "fce" in doc:
         return "interno"
     return "otro"
 
@@ -114,11 +122,16 @@ def detalle_facturacion(registros: list[APIAnalisisFacturacionRaw]) -> pd.DataFr
         if es_cliente_del_grupo(r.cliente) and not es_dohler:
             mercado = "intercompany"
         usd = r.fobtotal if mercado == "externo" else r.importemonsecundaria
-        # Dohler solo hace fibra: TODO lo suyo es FIBRAS (ventas, costos y
+        # Conceptos que no son venta (recupero de mano de obra, etc.) → NO PRODUCTO,
+        # fuera de los KPIs. Se chequea ANTES del override de Dohler.
+        # Dohler solo hace fibra: el resto de lo suyo es FIBRAS (ventas, costos y
         # gastos negativos que restan, etc.). Así cierra el neto como Marco.
-        segmento = "FIBRAS" if es_dohler else asignar_segmento(
-            r.familia, r.subfamilia, r.producto
-        )
+        if es_concepto_no_producto(r.producto):
+            segmento = NO_PRODUCTO
+        elif es_dohler:
+            segmento = "FIBRAS"
+        else:
+            segmento = asignar_segmento(r.familia, r.subfamilia, r.producto)
         filas.append({
             "fuente": "APIAnalisisFacturacion",
             "mercado": mercado,

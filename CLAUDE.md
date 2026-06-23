@@ -173,3 +173,6 @@ receta (ej. ME = mercado externo + fuente APIVentasCap).
 
 - Excel original de Marco: `C:\Users\Agustin Fernandez\Desktop\venta industria\VENTAS INDUSTRIA 03 06 2026.xlsm`
   (las conexiones Power Query adentro tienen los parámetros exactos que usa hoy).
+
+
+DOBLE CLICK EN OTROS

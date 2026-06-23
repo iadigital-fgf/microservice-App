@@ -87,25 +87,32 @@ def kpis_mercado_interno(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
     """KPIs de ventas locales.
 
     Receta (la de Marco):
-    - No-fibra: ventas locales de FGF Trapani (a clientes externos; el
-      intercompany ya quedó excluido en detalle.py).
-    - FIBRAS: solo lo que vende Dohler (la fibra se vende desde Dohler,
-      incluso cuando le factura a FGF; eso es venta real de fibra).
-
-    Los USD ya vienen de importemonsecundaria, asignado en detalle.py.
+    - Base: ventas locales de FGF Trapani (jugos, aceite, y las cáscaras CF-1
+      para la TN de fibra). El intercompany ya quedó excluido en detalle.py.
+    - FIBRAS: caso mixto → la TN sale de las cáscaras CF-1 de FGF (lo físico),
+      pero el USD se reemplaza por el de Dohler (lo que factura la fibra).
     """
     es_interno = detalle_ventas["mercado"] == "interno"
-    no_fibra = (
-        es_interno
-        & (detalle_ventas["empresa"] == EMPRESA_MI)
-        & (detalle_ventas["segmento"] != "FIBRAS")
+    base = _resumir(
+        _solo_industria(
+            detalle_ventas[es_interno & (detalle_ventas["empresa"] == EMPRESA_MI)]
+        )
     )
-    fibra = (
-        es_interno
-        & (detalle_ventas["empresa"] == EMPRESA_FIBRAS_ME)
-        & (detalle_ventas["segmento"] == "FIBRAS")
+
+    # FIBRAS: mantener la TN de FGF, reemplazar el USD por el de Dohler
+    usd_fibra = float(
+        detalle_ventas[
+            es_interno
+            & (detalle_ventas["empresa"] == EMPRESA_FIBRAS_ME)
+            & (detalle_ventas["segmento"] == "FIBRAS")
+        ]["usd"].sum()
     )
-    return _resumir(_solo_industria(detalle_ventas[no_fibra | fibra]))
+    mask = base["segmento"] == "FIBRAS"
+    if mask.any():
+        tn = base.loc[mask, "ventas_tn"].iloc[0]
+        base.loc[mask, "ventas_usd"] = round(usd_fibra, 2)
+        base.loc[mask, "precio_usd_tn"] = round(usd_fibra / tn, 2) if tn else None
+    return base
 
 
 def kpis_stock(detalle_stock: pd.DataFrame) -> pd.DataFrame:

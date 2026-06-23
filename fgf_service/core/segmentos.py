@@ -28,11 +28,23 @@ FAMILIAS_OTROS = {
 }
 
 SIN_CLASIFICAR = "SIN CLASIFICAR"
+NO_PRODUCTO = "NO PRODUCTO"
 
 # Segmentos que existen en el detalle pero NO entran a los KPIs de ventas:
-# la fruta fresca es otro negocio (este reporte es solo industria) y lo
-# sin clasificar se excluye hasta que se le escriba su regla.
-SEGMENTOS_EXCLUIDOS_KPIS = {"FRUTA FRESCA", SIN_CLASIFICAR}
+# la fruta fresca es otro negocio (este reporte es solo industria), lo sin
+# clasificar se excluye hasta tener su regla, y NO PRODUCTO son conceptos
+# que no son ventas (recupero de costos, etc.).
+SEGMENTOS_EXCLUIDOS_KPIS = {"FRUTA FRESCA", SIN_CLASIFICAR, NO_PRODUCTO}
+
+# Conceptos facturados que NO son ventas de producto (recupero de costos de
+# mano de obra, etc.) → no cuentan en los KPIs aunque sean filas de Dohler.
+_CONCEPTOS_NO_PRODUCTO = ("RECUPERO DE MANO DE OBRA",)
+
+
+def es_concepto_no_producto(producto: str | None) -> bool:
+    """True si el producto es un concepto que no es venta (recupero, etc.)."""
+    p = (producto or "").upper()
+    return any(c in p for c in _CONCEPTOS_NO_PRODUCTO)
 
 def asignar_segmento(
     familia: str | None,
