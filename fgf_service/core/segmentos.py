@@ -17,6 +17,28 @@ SEGMENTO_POR_FAMILIA_SUBFAMILIA = {
     ("JUGO", "POLVO"): "OTROS",
 }
 
+
+ORDEN_SEGMENTOS = {
+    "ACEITES": 1,
+    "JUGOS CONCENTRADOS": 2,
+    "JUGOS NFC": 3,
+    "JUGOS TOP": 4,
+    "CASCARAS": 5,
+    "FIBRAS": 6,
+    "OTROS": 7,
+}
+
+# Lista ordenada para reindexar el reporte final (siempre los 7 segmentos).
+SEGMENTOS_REPORTE = [
+    k for k, _ in sorted(ORDEN_SEGMENTOS.items(), key=lambda item: item[1])
+]
+
+# Sub-rubros visibles dentro de OTROS en el reporte directorio (anidados).
+# El resto de OTROS (esencia, cera, etc.) no se materializa en el JSON.
+SUBSEGMENTOS_OTROS = [
+    "Aceite de semilla",
+    "Terpeno",
+]
 # Familias que van enteras a OTROS, sin importar la subfamilia
 FAMILIAS_OTROS = {
     "CERA",
@@ -39,6 +61,22 @@ SEGMENTOS_EXCLUIDOS_KPIS = {"FRUTA FRESCA", SIN_CLASIFICAR, NO_PRODUCTO}
 # Conceptos facturados que NO son ventas de producto (recupero de costos de
 # mano de obra, etc.) → no cuentan en los KPIs aunque sean filas de Dohler.
 _CONCEPTOS_NO_PRODUCTO = ("RECUPERO DE MANO DE OBRA",)
+
+
+def subsegmento_otros(familia: str | None, producto: str | None) -> str | None:
+    """Clasifica una fila de segmento OTROS en sub-rubro del reporte directorio.
+
+    Solo devuelve nombre si es Aceite de semilla o Terpeno; el resto de OTROS
+    queda implícito (no se desglosa en la respuesta final).
+    """
+    familia = (familia or "").strip().upper()
+    producto = (producto or "").strip().upper()
+
+    if familia == "TERPENO" or "TERPENO" in producto:
+        return "Terpeno"
+    if "ACEITE DE SEMILLA" in producto or "SEMILLA" in producto:
+        return "Aceite de semilla"
+    return None
 
 
 def es_concepto_no_producto(producto: str | None) -> bool:

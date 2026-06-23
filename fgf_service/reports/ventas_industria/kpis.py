@@ -12,7 +12,11 @@ APIVentasCap y APIAnalisisFacturacion.
 import numpy as np
 import pandas as pd
 
-from fgf_service.core.segmentos import SEGMENTOS_EXCLUIDOS_KPIS
+from fgf_service.core.segmentos import (
+    SEGMENTOS_EXCLUIDOS_KPIS,
+    SUBSEGMENTOS_OTROS,
+    subsegmento_otros,
+)
 
 # Empresa de Facturación cuyas exportaciones NO están en VentasCap
 # (las fibras de Dohler) y por eso SÍ se suman al mercado externo.
@@ -51,6 +55,87 @@ def _resumir(df: pd.DataFrame) -> pd.DataFrame:
     resumen["ventas_usd"] = resumen["ventas_usd"].round(2)
     resumen["ventas_tn"] = resumen["ventas_tn"].round(2)
     return resumen
+
+
+def _subsegmentos_en_cero() -> pd.DataFrame:
+    """DataFrame con los 2 sub-rubros de OTROS en cero (sin ventas)."""
+    return pd.DataFrame(
+        {
+            "subsegmento": SUBSEGMENTOS_OTROS,
+            "ventas_usd": 0.0,
+            "ventas_tn": 0.0,
+            "precio_usd_tn": 0.0,
+        }
+    )
+
+
+def _resumir_subsegmentos(df: pd.DataFrame) -> pd.DataFrame:
+    """Agrupa filas de OTROS por sub-rubro (Aceite de semilla / Terpeno)."""
+    if df.empty:
+        return _subsegmentos_en_cero()
+    clasificado = df.copy()
+    clasificado["subsegmento"] = clasificado.apply(
+        lambda r: subsegmento_otros(r["familia"], r["producto"]), axis=1
+    )
+    clasificado = clasificado[clasificado["subsegmento"].notna()]
+    if clasificado.empty:
+        return _subsegmentos_en_cero()
+    resumen = (
+        clasificado.groupby("subsegmento", as_index=False)
+        .agg(ventas_usd=("usd", "sum"), ventas_tn=("tn", "sum"))
+    )
+    resumen["precio_usd_tn"] = (
+        resumen["ventas_usd"] / resumen["ventas_tn"].replace(0, np.nan)
+    ).round(2)
+    resumen["ventas_usd"] = resumen["ventas_usd"].round(2)
+    resumen["ventas_tn"] = resumen["ventas_tn"].round(2)
+    resumen = (
+        resumen.set_index("subsegmento")
+        .reindex(SUBSEGMENTOS_OTROS)
+        .fillna(0)
+        .reset_index()
+    )
+    return resumen
+
+
+def _filas_otros_mercado_externo(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
+    """Filas OTROS que entran al bloque Mercado Externo (misma base que VentasCap)."""
+    cap = detalle_ventas[detalle_ventas["fuente"] == "APIVentasCap"]
+    return _solo_industria(cap[cap["segmento"] == "OTROS"])
+
+
+def _filas_otros_mercado_interno(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
+    """Filas OTROS que entran al bloque Mercado Interno (FGF Trapani)."""
+    es_interno = detalle_ventas["mercado"] == "interno"
+    return _solo_industria(
+        detalle_ventas[
+            es_interno
+            & (detalle_ventas["empresa"] == EMPRESA_MI)
+            & (detalle_ventas["segmento"] == "OTROS")
+        ]
+    )
+
+
+def kpis_subsegmentos_otros_mercado_externo(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
+    """Aceite de semilla y Terpeno dentro de OTROS — mercado externo."""
+    return _resumir_subsegmentos(_filas_otros_mercado_externo(detalle_ventas))
+
+
+def kpis_subsegmentos_otros_mercado_interno(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
+    """Aceite de semilla y Terpeno dentro de OTROS — mercado interno."""
+    return _resumir_subsegmentos(_filas_otros_mercado_interno(detalle_ventas))
+
+
+def kpis_subsegmentos_otros_total(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
+    """Aceite de semilla y Terpeno dentro de OTROS — total (ME + MI)."""
+    filas = pd.concat(
+        [
+            _filas_otros_mercado_externo(detalle_ventas),
+            _filas_otros_mercado_interno(detalle_ventas),
+        ],
+        ignore_index=True,
+    )
+    return _resumir_subsegmentos(filas)
 
 
 def kpis_mercado_externo(detalle_ventas: pd.DataFrame) -> pd.DataFrame:
