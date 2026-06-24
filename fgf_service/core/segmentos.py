@@ -39,8 +39,12 @@ SUBSEGMENTOS_OTROS = [
     "Aceite de semilla",
     "Terpeno",
 ]
-# Familias que van enteras a OTROS, sin importar la subfamilia
+# Familias que van enteras a OTROS, sin importar la subfamilia.
+# Son subproductos/derivados del aceite: la tabla de Marco los carga mal en
+# ACEITES, pero la familia de Finnegans manda. Aceite de semilla y terpeno
+# además se desglosan dentro de OTROS (ver SUBSEGMENTOS_OTROS).
 FAMILIAS_OTROS = {
+    "ACEITE DE SEMILLA",
     "CERA",
     "DESTILADO",
     "ESENCIA",
@@ -74,7 +78,7 @@ def subsegmento_otros(familia: str | None, producto: str | None) -> str | None:
 
     if familia == "TERPENO" or "TERPENO" in producto:
         return "Terpeno"
-    if "ACEITE DE SEMILLA" in producto or "SEMILLA" in producto:
+    if familia == "ACEITE DE SEMILLA" or "SEMILLA" in producto:
         return "Aceite de semilla"
     return None
 

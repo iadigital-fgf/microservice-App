@@ -260,6 +260,26 @@ class APIStockProdIndustriaRaw(FinnegansBase):
     estadocalidad: str | None = None
     estadocomex: str | None = None
 
+class APIContratosIndustriaRaw(FinnegansBase):
+    """Registro crudo de APIContratosIndustria (fuente del presupuesto).
+
+    Cada fila es una entrega programada de un contrato. Los contratos con
+    DESCRIPCION="PPTO ME/MI {año}" son el presupuesto.
+    """
+
+    descripcion: str | None = None
+    producto: str | None = None
+    subfamilia: str | None = None
+    familia: str | None = None
+    cantidadstock2: float | None = None
+    unidadstock2: str | None = None
+    importemonsecundaria: float | None = None
+    fechaentrega: str | None = None
+    empresa: str | None = None
+    estado: str | None = None
+    ano: str | None = None
+
+
 class ConsolidacionVentasIndustria(FinnegansBase):
     """Consolida los registros de todas las APIs del reporte ventas industria."""
 

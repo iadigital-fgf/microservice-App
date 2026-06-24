@@ -13,6 +13,7 @@ import pandas as pd
 
 from fgf_service.core.segmentos import SEGMENTOS_REPORTE, SUBSEGMENTOS_OTROS
 from fgf_service.reports.ventas_industria import kpis
+from fgf_service.reports.ventas_industria.presupuesto import kpis_presupuesto
 from fgf_service.reports.ventas_industria.detalle import (
     apilar_detalle_ventas,
     apilar_detalle_stock,
@@ -99,6 +100,29 @@ def _variacion(actual: pd.DataFrame, anterior: pd.DataFrame, clave: str = "segme
     return out
 
 
+def _bloque_presupuesto(actual: pd.DataFrame, ppto: pd.DataFrame) -> pd.DataFrame:
+    """Bloque PPTO con los nombres del reporte de Marco + VAR real-vs-ppto.
+
+    - actual: bloque año actual ya completado (segmento, ventas_usd, precio_usd_tn).
+    - ppto:   kpis_presupuesto (segmento, ventas_ppto_usd, precio_ppto_usd_tn).
+
+    real_vs_ppto_var = ventas reales / ventas presupuestadas
+    var_precio_ppto  = precio real / precio presupuestado
+    """
+    ppto = _completar_segmentos(ppto, ["ventas_ppto_usd", "precio_ppto_usd_tn"])
+    m = actual.merge(ppto, on="segmento", how="left")
+    out = pd.DataFrame({"segmento": m["segmento"]})
+    out["ventas_ppto_usd"] = m["ventas_ppto_usd"].fillna(0)
+    out["real_vs_ppto_var"] = (
+        m["ventas_usd"] / m["ventas_ppto_usd"].replace(0, np.nan)
+    ).round(4).fillna(0)
+    out["precio_ppto"] = m["precio_ppto_usd_tn"]
+    out["var_precio_ppto"] = (
+        m["precio_usd_tn"] / m["precio_ppto_usd_tn"].replace(0, np.nan)
+    ).round(4).fillna(0)
+    return out
+
+
 def _limpiar_valor(v):
     """NaN → None para JSON; el resto se deja igual."""
     if isinstance(v, float) and math.isnan(v):
@@ -143,10 +167,13 @@ def bloque_comparado(
     stock: pd.DataFrame,
     sub_actual: pd.DataFrame,
     sub_anterior: pd.DataFrame,
+    ppto: pd.DataFrame,
 ) -> dict:
-    """Arma un bloque sectorizado: año actual y año anterior.
+    """Arma un bloque sectorizado: año actual, presupuesto y año anterior.
 
     - anio_actual: ventas_usd, ventas_tn, precio_usd_tn + stock_tn.
+    - presupuesto: ventas_ppto_usd, real_vs_ppto_var, precio_ppto, var_precio_ppto
+      (solo del año actual; los nombres espejan las columnas del reporte).
     - anio_anterior: ventas_real_usd, precio_fob_real + var_usd, var_precio
       (sin ventas_tn, que ese bloque del reporte no muestra).
     - OTROS incluye subsegmentos anidados (Aceite de semilla, Terpeno).
@@ -175,10 +202,13 @@ def bloque_comparado(
         .merge(sub_variacion, on="subsegmento", how="left")
     )
 
+    presupuesto_out = _bloque_presupuesto(actual, ppto)
+
     return {
         "anio_actual": _records_segmentos(
             actual_out, sub_actual, incluir_subsegmentos=True
         ),
+        "presupuesto": _records_segmentos(presupuesto_out),
         "anio_anterior": _records_segmentos(
             anterior_out,
             sub_anterior_out,
@@ -189,20 +219,30 @@ def bloque_comparado(
     }
 
 
-def armar_reporte(datos_actual, datos_anterior) -> dict:
+def armar_reporte(datos_actual, datos_anterior, presupuesto, meses) -> dict:
     """Arma el reporte final completo: los tres mercados sectorizados, cada uno
-    con año actual, año anterior y variación."""
+    con año actual, presupuesto y año anterior.
+
+    - presupuesto: tabla de apilar_presupuesto (mercado, segmento, mes, usd, tn).
+    - meses: meses completos del período (los que se suman del PPTO).
+    """
     act = calcular_bloques(datos_actual)
     ant = calcular_bloques(datos_anterior)
     stock = act["stock"]  # mismo stock (inventario actual) para los tres bloques
+
+    # PPTO por mercado; el TOTAL es externo + interno (mercado=None)
+    ppto_me = kpis_presupuesto(presupuesto, meses, "externo")
+    ppto_mi = kpis_presupuesto(presupuesto, meses, "interno")
+    ppto_total = kpis_presupuesto(presupuesto, meses)
+
     return {
         "mercado_externo": bloque_comparado(
-            act["me"], ant["me"], stock, act["sub_me"], ant["sub_me"]
+            act["me"], ant["me"], stock, act["sub_me"], ant["sub_me"], ppto_me
         ),
         "mercado_interno": bloque_comparado(
-            act["mi"], ant["mi"], stock, act["sub_mi"], ant["sub_mi"]
+            act["mi"], ant["mi"], stock, act["sub_mi"], ant["sub_mi"], ppto_mi
         ),
         "total": bloque_comparado(
-            act["total"], ant["total"], stock, act["sub_total"], ant["sub_total"]
+            act["total"], ant["total"], stock, act["sub_total"], ant["sub_total"], ppto_total
         ),
     }

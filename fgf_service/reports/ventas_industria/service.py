@@ -2,6 +2,8 @@ import asyncio
 import logging
 from datetime import date
 
+import httpx
+
 from fgf_service.connectors.APIanalisis_facturacion import fetch_APIAnalisis_facturacion
 from fgf_service.connectors.APIanalisis_laboratorio import fetch_APIAnalisis_laboratorio
 from fgf_service.connectors.APIStockProdIndustria import fetch_APIStockProdIndustria
@@ -25,9 +27,33 @@ logger = logging.getLogger(__name__)
 EMPRESA_DOHLER = "DOHLER-TRAPANI ARGENTINA S.A."
 
 
+async def _stock_o_vacio(
+    fecha: date, access_token: str, empresa: str
+) -> list[dict]:
+    """Trae el stock de un depósito tolerando fallas de Finnegans.
+
+    El stock es un dato secundario: si la llamada falla (ej. un 500 del
+    servidor), se loguea y se devuelve vacío en vez de tumbar todo el
+    reporte. Mejor entregar las ventas que no entregar nada.
+    """
+    try:
+        return await fetch_APIStockProdIndustria(fecha, access_token, empresa)
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            "Stock de %s falló (%s); se continúa con stock vacío para ese depósito",
+            empresa,
+            e,
+        )
+        return []
+
+
 async def reporte_ventas_industria(
     fecha_desde: date, fecha_hasta: date, access_token: str
 ) -> ConsolidacionVentasIndustria:
+
+    # El stock es una foto del inventario AHORA (no acepta fecha histórica:
+    # Finnegans tira 500 si se le pide una fecha pasada). Siempre se pide a hoy.
+    hoy = date.today()
 
     (
         raw_ventas_cap,
@@ -50,12 +76,12 @@ async def reporte_ventas_industria(
         ),
         # Laboratorio
         fetch_APIAnalisis_laboratorio(access_token),
-        # Stock Argentina
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.ARG),
+        # Stock Argentina (foto a hoy, tolerante a fallas)
+        _stock_o_vacio(hoy, access_token, empresa=Stock.ARG),
         # Stock Exterior
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.EXT),
+        _stock_o_vacio(hoy, access_token, empresa=Stock.EXT),
         # Stock DT
-        fetch_APIStockProdIndustria(fecha_hasta, access_token, empresa=Stock.DT),
+        _stock_o_vacio(hoy, access_token, empresa=Stock.DT),
     )
 
     # Combinar facturación: la general SIN las filas de Dohler (para no duplicar)

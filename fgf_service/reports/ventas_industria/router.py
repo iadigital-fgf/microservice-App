@@ -12,8 +12,15 @@ from datetime import date
 
 from fastapi import APIRouter
 
+from fgf_service.connectors.APIContratosIndustria import fetch_APIContratosIndustria
+from fgf_service.helpers.parsers import parse_finnegans
 from fgf_service.reports.ventas_industria import armado
 from fgf_service.reports.ventas_industria.service import reporte_ventas_industria
+from fgf_service.reports.ventas_industria.schemas import APIContratosIndustriaRaw
+from fgf_service.reports.ventas_industria.presupuesto import (
+    apilar_presupuesto,
+    meses_del_periodo,
+)
 from fgf_service.reports.ventas_industria.detalle import (
     apilar_detalle_ventas,
     apilar_detalle_stock,
@@ -35,7 +42,18 @@ async def reporte_final(fecha_desde: date, fecha_hasta: date, access_token: str)
         armado.menos_un_anio(fecha_hasta),
         access_token,
     )
-    return armado.armar_reporte(datos_actual, datos_anterior)
+    # Presupuesto del año actual: se trae el AÑO COMPLETO de contratos (1/1→31/12),
+    # no hasta el corte. Si no, se pierden contratos-presupuesto cargados después
+    # del corte (aunque su entrega sea de un mes anterior). El corte solo decide
+    # qué meses del presupuesto se SUMAN (ver `meses`), no qué contratos se traen.
+    contratos_raw = await fetch_APIContratosIndustria(
+        date(fecha_hasta.year, 1, 1), date(fecha_hasta.year, 12, 31), access_token
+    )
+    contratos = parse_finnegans(contratos_raw, APIContratosIndustriaRaw)
+    presupuesto = apilar_presupuesto(contratos, fecha_hasta.year)
+    meses = meses_del_periodo(fecha_desde, fecha_hasta)
+
+    return armado.armar_reporte(datos_actual, datos_anterior, presupuesto, meses)
 
 
 @router.get("/detalle/ventas")
@@ -64,6 +82,53 @@ async def detalle_ventas(
     if empresa:
         ventas = ventas[ventas["empresa"].str.contains(empresa, case=False, na=False)]
     return ventas.to_dict(orient="records")
+
+
+@router.get("/detalle/contratos")
+async def detalle_contratos(
+    fecha_desde: date,
+    fecha_hasta: date,
+    access_token: str,
+    solo_ppto: bool = True,
+):
+    """Contratos crudos de APIContratosIndustria — para inspeccionar la data
+    real antes de armar el cálculo del presupuesto.
+
+    - solo_ppto=True (default): solo los contratos del presupuesto
+      (DESCRIPCION contiene "PPTO", sin distinguir mayúsculas).
+    Devuelve el total de filas + una muestra con TODOS los campos, así
+    confirmamos los nombres reales (sobre todo cómo viene el mes de entrega).
+    """
+    registros = await fetch_APIContratosIndustria(fecha_desde, fecha_hasta, access_token)
+    if solo_ppto:
+        registros = [
+            r for r in registros if "PPTO" in str(r.get("DESCRIPCION", "")).upper()
+        ]
+    descripciones = sorted({str(r.get("DESCRIPCION", "")) for r in registros})
+    return {
+        "total_filas": len(registros),
+        "descripciones_distintas": descripciones[:30],
+        "muestra": registros[:3],
+    }
+
+
+@router.get("/detalle/presupuesto")
+async def detalle_presupuesto(
+    fecha_desde: date, fecha_hasta: date, access_token: str
+):
+    """Presupuesto (PPTO) agregado por mercado / segmento / mes de entrega.
+
+    Para validar contra la hoja mensual de Marco antes de enchufarlo al
+    reporte. El año del PPTO sale de `fecha_desde`. Tip: para ver el año
+    completo, pedí fecha_hasta=AÑO-12-31.
+    """
+    raw = await fetch_APIContratosIndustria(fecha_desde, fecha_hasta, access_token)
+    contratos = parse_finnegans(raw, APIContratosIndustriaRaw)
+    ppto = apilar_presupuesto(contratos, fecha_desde.year)
+    resumen = ppto.groupby(["mercado", "segmento", "mes"], as_index=False).agg(
+        usd=("usd", "sum"), tn=("tn", "sum")
+    )
+    return resumen.round(2).to_dict(orient="records")
 
 
 @router.get("/detalle/stock")
