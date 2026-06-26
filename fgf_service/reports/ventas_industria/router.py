@@ -8,6 +8,8 @@ Tres ventanillas:
 La lógica de armado vive en `armado.py`; acá solo están los endpoints.
 """
 
+import asyncio
+import time
 from datetime import date
 
 from fastapi import APIRouter
@@ -17,10 +19,7 @@ from fgf_service.helpers.parsers import parse_finnegans
 from fgf_service.reports.ventas_industria import armado
 from fgf_service.reports.ventas_industria.service import reporte_ventas_industria
 from fgf_service.reports.ventas_industria.schemas import APIContratosIndustriaRaw
-from fgf_service.reports.ventas_industria.presupuesto import (
-    apilar_presupuesto,
-    meses_del_periodo,
-)
+from fgf_service.reports.ventas_industria.presupuesto import apilar_presupuesto
 from fgf_service.reports.ventas_industria.detalle import (
     apilar_detalle_ventas,
     apilar_detalle_stock,
@@ -29,31 +28,67 @@ from fgf_service.reports.ventas_industria.detalle import (
 router = APIRouter(prefix="/reportes/ventas-industria", tags=["Ventas Industria"])
 
 
-@router.get("")
-async def reporte_final(fecha_desde: date, fecha_hasta: date, access_token: str):
-    """Reporte directorio: KPIs por segmento, sectorizado por mercado, con
-    comparación contra el mismo período del año anterior (derivado restando
-    un año a las fechas pedidas)."""
-    # Se traen los dos años (secuencial para no saturar Finnegans con 14 llamadas
-    # simultáneas). El año anterior es histórico: candidato a cachearse más adelante.
+# Cache en memoria del reporte. La primera llamada de cada (fecha_desde,
+# fecha_hasta) calcula (~3 min) y las siguientes salen al instante hasta que
+# vence el TTL. El candado evita que varias llamadas simultáneas (ej. las
+# consultas de Power Query) disparen el cálculo en paralelo: una calcula y el
+# resto espera ese mismo resultado, en vez de pegarle 6 veces a Finnegans.
+_CACHE_TTL_SEG = 1800  # 30 minutos
+_cache: dict = {}
+_locks: dict = {}
+
+
+async def _construir_reporte(
+    fecha_desde: date, fecha_hasta: date, access_token: str
+) -> dict:
+    """Arma el reporte de cero (las llamadas a Finnegans + el armado)."""
+    # Se traen los dos años (secuencial para no saturar Finnegans). El año
+    # anterior se deriva restando un año a las fechas pedidas.
     datos_actual = await reporte_ventas_industria(fecha_desde, fecha_hasta, access_token)
     datos_anterior = await reporte_ventas_industria(
         armado.menos_un_anio(fecha_desde),
         armado.menos_un_anio(fecha_hasta),
         access_token,
     )
-    # Presupuesto del año actual: se trae el AÑO COMPLETO de contratos (1/1→31/12),
-    # no hasta el corte. Si no, se pierden contratos-presupuesto cargados después
-    # del corte (aunque su entrega sea de un mes anterior). El corte solo decide
-    # qué meses del presupuesto se SUMAN (ver `meses`), no qué contratos se traen.
+    # Presupuesto: se TRAE desde el 1/1 del año ANTERIOR hasta fin del año del
+    # corte. Los contratos-presupuesto del año suelen cargarse durante el año
+    # previo (al planificar), y la API filtra por FECHA del contrato — si se
+    # arrancaba en el año corriente se perdían ~75% de los contratos. El corte
+    # NO se aplica acá: solo decide qué entregas se SUMAN, dentro de apilar/kpis.
     contratos_raw = await fetch_APIContratosIndustria(
-        date(fecha_hasta.year, 1, 1), date(fecha_hasta.year, 12, 31), access_token
+        date(fecha_hasta.year - 1, 1, 1), date(fecha_hasta.year, 12, 31), access_token
     )
     contratos = parse_finnegans(contratos_raw, APIContratosIndustriaRaw)
     presupuesto = apilar_presupuesto(contratos, fecha_hasta.year)
-    meses = meses_del_periodo(fecha_desde, fecha_hasta)
 
-    return armado.armar_reporte(datos_actual, datos_anterior, presupuesto, meses)
+    return armado.armar_reporte(
+        datos_actual, datos_anterior, presupuesto, fecha_desde, fecha_hasta
+    )
+
+
+@router.get("")
+async def reporte_final(fecha_desde: date, fecha_hasta: date, access_token: str):
+    """Reporte directorio: KPIs por segmento, sectorizado por mercado, con
+    año actual, presupuesto y año anterior.
+
+    Cacheado por (fecha_desde, fecha_hasta): la primera llamada calcula y las
+    siguientes salen al instante hasta que vence el TTL (reiniciar el server
+    también limpia el cache si querés forzar un refresco).
+    """
+    clave = (fecha_desde, fecha_hasta)
+    cacheado = _cache.get(clave)
+    if cacheado and time.monotonic() - cacheado[0] < _CACHE_TTL_SEG:
+        return cacheado[1]
+
+    candado = _locks.setdefault(clave, asyncio.Lock())
+    async with candado:
+        # Re-chequeo: otra llamada pudo haberlo calculado mientras esperábamos.
+        cacheado = _cache.get(clave)
+        if cacheado and time.monotonic() - cacheado[0] < _CACHE_TTL_SEG:
+            return cacheado[1]
+        reporte = await _construir_reporte(fecha_desde, fecha_hasta, access_token)
+        _cache[clave] = (time.monotonic(), reporte)
+        return reporte
 
 
 @router.get("/detalle/ventas")
@@ -125,10 +160,14 @@ async def detalle_presupuesto(
     raw = await fetch_APIContratosIndustria(fecha_desde, fecha_hasta, access_token)
     contratos = parse_finnegans(raw, APIContratosIndustriaRaw)
     ppto = apilar_presupuesto(contratos, fecha_desde.year)
-    resumen = ppto.groupby(["mercado", "segmento", "mes"], as_index=False).agg(
-        usd=("usd", "sum"), tn=("tn", "sum")
+    # Agrupado por mercado/familia/segmento para ver cómo clasifica cada familia
+    # de contrato (sin filtrar por fecha: muestra TODO el presupuesto del año).
+    resumen = ppto.groupby(
+        ["mercado", "familia", "segmento"], as_index=False
+    ).agg(usd=("usd", "sum"), tn=("tn", "sum"))
+    return resumen.sort_values(["mercado", "segmento", "familia"]).round(2).to_dict(
+        orient="records"
     )
-    return resumen.round(2).to_dict(orient="records")
 
 
 @router.get("/detalle/stock")

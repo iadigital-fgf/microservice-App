@@ -22,6 +22,7 @@ from fgf_service.reports.ventas_industria.detalle import (
 # El año anterior usa los nombres del reporte de Marco (columnas "REAL")
 _NOMBRES_ANIO_ANTERIOR = {
     "ventas_usd": "ventas_real_usd",
+    "ventas_tn": "ventas_real_tn",
     "precio_usd_tn": "precio_fob_real",
 }
 
@@ -109,10 +110,13 @@ def _bloque_presupuesto(actual: pd.DataFrame, ppto: pd.DataFrame) -> pd.DataFram
     real_vs_ppto_var = ventas reales / ventas presupuestadas
     var_precio_ppto  = precio real / precio presupuestado
     """
-    ppto = _completar_segmentos(ppto, ["ventas_ppto_usd", "precio_ppto_usd_tn"])
+    ppto = _completar_segmentos(
+        ppto, ["ventas_ppto_usd", "ppto_tn", "precio_ppto_usd_tn"]
+    )
     m = actual.merge(ppto, on="segmento", how="left")
     out = pd.DataFrame({"segmento": m["segmento"]})
     out["ventas_ppto_usd"] = m["ventas_ppto_usd"].fillna(0)
+    out["ventas_ppto_tn"] = m["ppto_tn"].fillna(0)
     out["real_vs_ppto_var"] = (
         m["ventas_usd"] / m["ventas_ppto_usd"].replace(0, np.nan)
     ).round(4).fillna(0)
@@ -161,6 +165,59 @@ def _records_segmentos(
     return records
 
 
+def _totales(
+    actual: pd.DataFrame,
+    anterior: pd.DataFrame,
+    stock: pd.DataFrame,
+    ppto: pd.DataFrame,
+) -> tuple[dict, dict, dict]:
+    """Fila TOTAL de cada sección (segmento="TOTAL").
+
+    Suma USD/TN/stock y calcula el precio PONDERADO (USD total / TN total, nunca
+    promedio de promedios). Los VAR del total son ratios de los totales.
+    """
+    a_usd = float(actual["ventas_usd"].sum())
+    a_tn = float(actual["ventas_tn"].sum())
+    an_usd = float(anterior["ventas_usd"].sum())
+    an_tn = float(anterior["ventas_tn"].sum())
+    p_usd = float(ppto["ventas_ppto_usd"].sum())
+    p_tn = float(ppto["ppto_tn"].sum())
+    stk = float(stock["stock_tn"].sum())
+
+    def precio(usd, tn):
+        return round(usd / tn, 2) if tn else None
+
+    def ratio(num, den):
+        return round(num / den, 4) if den else 0.0
+
+    pr_act, pr_ppto, pr_ant = precio(a_usd, a_tn), precio(p_usd, p_tn), precio(an_usd, an_tn)
+
+    total_actual = {
+        "segmento": "TOTAL",
+        "ventas_usd": round(a_usd, 2),
+        "ventas_tn": round(a_tn, 2),
+        "precio_usd_tn": pr_act,
+        "stock_tn": round(stk, 2),
+    }
+    total_ppto = {
+        "segmento": "TOTAL",
+        "ventas_ppto_usd": round(p_usd, 2),
+        "ventas_ppto_tn": round(p_tn, 2),
+        "real_vs_ppto_var": ratio(a_usd, p_usd),
+        "precio_ppto": pr_ppto,
+        "var_precio_ppto": ratio(pr_act or 0, pr_ppto) if pr_ppto else 0.0,
+    }
+    total_anterior = {
+        "segmento": "TOTAL",
+        "ventas_real_usd": round(an_usd, 2),
+        "ventas_real_tn": round(an_tn, 2),
+        "precio_fob_real": pr_ant,
+        "var_usd": ratio(a_usd, an_usd),
+        "var_precio": ratio(pr_act or 0, pr_ant) if pr_ant else 0.0,
+    }
+    return total_actual, total_ppto, total_anterior
+
+
 def bloque_comparado(
     actual: pd.DataFrame,
     anterior: pd.DataFrame,
@@ -193,47 +250,59 @@ def bloque_comparado(
 
     anterior_out = (
         anterior.rename(columns=_NOMBRES_ANIO_ANTERIOR)
-        .drop(columns=["ventas_tn"])
         .merge(variacion, on="segmento", how="left")
     )
     sub_anterior_out = (
         sub_anterior.rename(columns=_NOMBRES_ANIO_ANTERIOR)
-        .drop(columns=["ventas_tn"])
         .merge(sub_variacion, on="subsegmento", how="left")
     )
 
     presupuesto_out = _bloque_presupuesto(actual, ppto)
 
+    # Fila TOTAL al final de cada sección (Totales al FOB / Total / Total General)
+    total_actual, total_ppto, total_anterior = _totales(actual, anterior, stock, ppto)
+
+    anio_actual = _records_segmentos(actual_out, sub_actual, incluir_subsegmentos=True)
+    anio_actual.append(total_actual)
+
+    presupuesto = _records_segmentos(presupuesto_out)
+    presupuesto.append(total_ppto)
+
+    anio_anterior = _records_segmentos(
+        anterior_out,
+        sub_anterior_out,
+        incluir_subsegmentos=True,
+        renombrar=_NOMBRES_ANIO_ANTERIOR,
+        columnas_extra=["var_usd", "var_precio"],
+    )
+    anio_anterior.append(total_anterior)
+
     return {
-        "anio_actual": _records_segmentos(
-            actual_out, sub_actual, incluir_subsegmentos=True
-        ),
-        "presupuesto": _records_segmentos(presupuesto_out),
-        "anio_anterior": _records_segmentos(
-            anterior_out,
-            sub_anterior_out,
-            incluir_subsegmentos=True,
-            renombrar=_NOMBRES_ANIO_ANTERIOR,
-            columnas_extra=["var_usd", "var_precio"],
-        ),
+        "anio_actual": anio_actual,
+        "presupuesto": presupuesto,
+        "anio_anterior": anio_anterior,
     }
 
 
-def armar_reporte(datos_actual, datos_anterior, presupuesto, meses) -> dict:
+def armar_reporte(
+    datos_actual, datos_anterior, presupuesto, fecha_desde, fecha_hasta
+) -> dict:
     """Arma el reporte final completo: los tres mercados sectorizados, cada uno
     con año actual, presupuesto y año anterior.
 
-    - presupuesto: tabla de apilar_presupuesto (mercado, segmento, mes, usd, tn).
-    - meses: meses completos del período (los que se suman del PPTO).
+    - presupuesto: tabla de apilar_presupuesto (mercado, segmento, fecha_entrega,
+      usd, tn).
+    - fecha_desde/fecha_hasta: el rango pedido; el PPTO suma las entregas que
+      caen ahí (el mismo rango que las ventas).
     """
     act = calcular_bloques(datos_actual)
     ant = calcular_bloques(datos_anterior)
     stock = act["stock"]  # mismo stock (inventario actual) para los tres bloques
 
     # PPTO por mercado; el TOTAL es externo + interno (mercado=None)
-    ppto_me = kpis_presupuesto(presupuesto, meses, "externo")
-    ppto_mi = kpis_presupuesto(presupuesto, meses, "interno")
-    ppto_total = kpis_presupuesto(presupuesto, meses)
+    ppto_me = kpis_presupuesto(presupuesto, fecha_desde, fecha_hasta, "externo")
+    ppto_mi = kpis_presupuesto(presupuesto, fecha_desde, fecha_hasta, "interno")
+    ppto_total = kpis_presupuesto(presupuesto, fecha_desde, fecha_hasta)
 
     return {
         "mercado_externo": bloque_comparado(
