@@ -228,3 +228,20 @@ PRODUCTO_SEGMENTO = {
     'Concentrado de Aceite de Limón 5 Fold B19K': ('ACEITE LIMON', 'Convencional', 'ACEITE'),
     'Aceite de Semilla de Limón T180 Kgs': ('ACEITE SEMILLA LIMON', 'Convencional', 'ACEITE'),
 }
+
+
+# Nombres de columna TAL CUAL el Excel (hoja Producto-Segmento).
+COLUMNAS = ["PRODUCTO", "Fam-Esp 2", "Segmento", "Segmento 2"]
+
+
+def tabla() -> list[dict]:
+    """La tabla Producto-Segmento como filas, igual que en el Excel.
+
+    Se expone como un cajón aparte del JSON para que Marco la materialice en
+    su propia tabla (no se cruza con las otras APIs).
+    """
+    return [
+        {"PRODUCTO": producto, "Fam-Esp 2": fam_esp,
+         "Segmento": segmento, "Segmento 2": segmento_2}
+        for producto, (fam_esp, segmento, segmento_2) in PRODUCTO_SEGMENTO.items()
+    ]
