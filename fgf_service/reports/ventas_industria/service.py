@@ -1,21 +1,21 @@
 """Orquestador del reporte VENTAS INDUSTRIA.
 
-Una sola función junta TODAS las conexiones a Finnegans (las de cada sección)
-y devuelve un único dict con una tabla ("cajón") por conexión. Eso es lo que
-sirve el endpoint único y lo que se cachea (corrida 3am): el Excel le pega
-una sola vez y cada tabla del Excel toma su cajón.
-
-Se va llenando sección por sección. Hoy: ME real + MI real.
+Junta TODAS las conexiones a Finnegans (en paralelo) y devuelve un único dict
+con un cajón por consulta del Excel (1:1). El Excel le pega una sola vez y cada
+tabla toma su cajón. Esto es lo que se cachea (corrida 3am).
 """
 
 import asyncio
 from datetime import date
 
 from fgf_service.reports.ventas_industria.secciones.me_real.ventas_cap import (
-    traer_ventas_cap,
+    traer_ventas_cap_base,
+    traer_ventas_cap_2023_1s,
+    traer_ventas_cap_2023_2s,
 )
 from fgf_service.reports.ventas_industria.secciones.mi_real.facturacion import (
-    traer_facturacion_fgf,
+    traer_facturacion_fgf_base,
+    traer_facturacion_fgf_2017_2022,
     traer_facturacion_dohler,
     traer_facturacion_tucuman,
     traer_facturacion_tgt,
@@ -42,20 +42,26 @@ async def traer_todo(
 ) -> dict:
     """Llama a todas las conexiones (en paralelo) y arma el JSON consolidado."""
     (
-        ventas_cap,          # ME real
-        facturacion_fgf,     # MI real — EMPRE01
-        facturacion_dohler,  # MI real — DOHLER63
-        facturacion_tucuman, # MI real — TUCUMANTRAPANI69
-        facturacion_tgt,     # MI real — TGT61
-        contratos,           # PPTO
-        stock_arg,           # Stock — EMPRE01
-        stock_ext,           # Stock — CAPACITACION43
-        stock_dt,            # Stock — DOHLER63
-        despachos,           # Stock — despachos
-        analisis_type,       # Stock — laboratorio (AnalisisType)
+        ventas_cap_base,        # AnalisisFacturasVentas (base)
+        ventas_cap_2023_1s,     # AnalisisFacturasVentas 2023-1S
+        ventas_cap_2023_2s,     # AnalisisFacturasVentas 2023-2S
+        facturacion_fgf_base,   # AnalisisFacturasVentas-A (EMPRE01 base)
+        facturacion_fgf_2017_2022,  # AnalisisFacturasVentas-A 2017-2022
+        facturacion_dohler,     # AnalisisFacturasVentas-A DTARG
+        facturacion_tucuman,    # AnalisisFacturasVentas-A SA TT
+        facturacion_tgt,        # AnalisisFacturasVentas-A TGT
+        contratos,              # Contratos
+        stock_arg,              # Stock-ARG
+        stock_ext,              # Stock-EXT
+        stock_dt,               # Stock-DT
+        despachos,              # Despachos
+        analisis_type,          # AnalisisType
     ) = await asyncio.gather(
-        traer_ventas_cap(fecha_desde, fecha_hasta, access_token),
-        traer_facturacion_fgf(fecha_desde, fecha_hasta, access_token),
+        traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token),
+        traer_ventas_cap_2023_1s(access_token),
+        traer_ventas_cap_2023_2s(access_token),
+        traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token),
+        traer_facturacion_fgf_2017_2022(access_token),
         traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token),
         traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token),
         traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token),
@@ -68,21 +74,24 @@ async def traer_todo(
     )
 
     return {
-        # ── ME real ──
-        "ventas_cap": ventas_cap,
-        # ── MI real ──
-        "facturacion_fgf": facturacion_fgf,
-        "facturacion_dohler": facturacion_dohler,
-        "facturacion_tucuman": facturacion_tucuman,
-        "facturacion_tgt": facturacion_tgt,
+        # ── ME real (VentasCap) ──
+        "ventas_cap_base": ventas_cap_base,            # AnalisisFacturasVentas (base)
+        "ventas_cap_2023_1s": ventas_cap_2023_1s,      # AnalisisFacturasVentas 2023-1S
+        "ventas_cap_2023_2s": ventas_cap_2023_2s,      # AnalisisFacturasVentas 2023-2S
+        # ── MI real (Facturación) ──
+        "facturacion_fgf_base": facturacion_fgf_base,            # -A (EMPRE01 base)
+        "facturacion_fgf_2017_2022": facturacion_fgf_2017_2022,  # -A 2017-2022
+        "facturacion_dohler": facturacion_dohler,                # -A DTARG
+        "facturacion_tucuman": facturacion_tucuman,              # -A SA TT
+        "facturacion_tgt": facturacion_tgt,                      # -A TGT
         # ── PPTO ──
-        "contratos": contratos,
+        "contratos": contratos,                        # Contratos
         # ── Stock ──
-        "stock_arg": stock_arg,
-        "stock_ext": stock_ext,
-        "stock_dt": stock_dt,
-        "despachos": despachos,
-        "analisis_type": analisis_type,
-        # ── Tabla de referencia (estática, mantenida por Marco) ──
-        "producto_segmento": producto_segmento.tabla(),
+        "stock_arg": stock_arg,                        # Stock-ARG
+        "stock_ext": stock_ext,                        # Stock-EXT
+        "stock_dt": stock_dt,                          # Stock-DT
+        "despachos": despachos,                        # Despachos
+        "analisis_type": analisis_type,                # AnalisisType
+        # ── Referencia (estática, mantenida por Marco) ──
+        "producto_segmento": producto_segmento.tabla(),  # Producto-Segmento
     }

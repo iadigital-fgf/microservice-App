@@ -176,3 +176,6 @@ receta (ej. ME = mercado externo + fuente APIVentasCap).
 
 
 DOBLE CLICK EN OTROS
+
+Errores:
+STOCK EXT Y Analisis-FV TGT Vacios
