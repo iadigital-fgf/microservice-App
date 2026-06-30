@@ -6,6 +6,7 @@ tabla toma su cajón. Esto es lo que se cachea (corrida 3am).
 """
 
 import asyncio
+import logging
 from datetime import date
 
 from fgf_service.reports.ventas_industria.secciones.me_real.ventas_cap import (
@@ -36,6 +37,23 @@ from fgf_service.reports.ventas_industria.secciones.stock.laboratorio import (
 )
 from fgf_service.core import producto_segmento
 
+logger = logging.getLogger(__name__)
+
+
+async def _seguro(coro) -> list:
+    """Ejecuta una conexión tolerando fallas.
+
+    Si la llamada a Finnegans falla (ej. un 500 por sobrecarga que agotó los
+    reintentos), se loguea y se devuelve [] (cajón vacío) en vez de propagar la
+    excepción. Así una API caída NO tumba todo el reporte: las demás llegan
+    igual y solo ese cajón queda vacío.
+    """
+    try:
+        return await coro
+    except Exception as e:  # noqa: BLE001 — a propósito: cualquier falla -> cajón vacío
+        logger.warning("Una conexión falló; se devuelve cajón vacío: %s", e)
+        return []
+
 
 async def traer_todo(
     fecha_desde: date, fecha_hasta: date, access_token: str
@@ -57,20 +75,20 @@ async def traer_todo(
         despachos,              # Despachos
         analisis_type,          # AnalisisType
     ) = await asyncio.gather(
-        traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token),
-        traer_ventas_cap_2023_1s(access_token),
-        traer_ventas_cap_2023_2s(access_token),
-        traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token),
-        traer_facturacion_fgf_2017_2022(access_token),
-        traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token),
-        traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token),
-        traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token),
-        traer_contratos(fecha_desde, fecha_hasta, access_token),
-        traer_stock_arg(access_token),
-        traer_stock_ext(access_token),
-        traer_stock_dt(access_token),
-        traer_despachos(fecha_desde, fecha_hasta, access_token),
-        traer_analisis_type(access_token),
+        _seguro(traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_ventas_cap_2023_1s(access_token)),
+        _seguro(traer_ventas_cap_2023_2s(access_token)),
+        _seguro(traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_facturacion_fgf_2017_2022(access_token)),
+        _seguro(traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_contratos(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_stock_arg(access_token)),
+        _seguro(traer_stock_ext(access_token)),
+        _seguro(traer_stock_dt(access_token)),
+        _seguro(traer_despachos(fecha_desde, fecha_hasta, access_token)),
+        _seguro(traer_analisis_type(access_token)),
     )
 
     return {

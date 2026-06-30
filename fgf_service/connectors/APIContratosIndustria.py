@@ -11,6 +11,8 @@ async def fetch_APIContratosIndustria(
     DESCRIPCION="PPTO ME/MI {año}" son los objetivos de venta.
     Toma rango de fechas (sin empresa), igual que la API de facturación.
     """
+
+
     return await finnegans.get(
         "APIContratosIndustria",
         access_token=access_token,
