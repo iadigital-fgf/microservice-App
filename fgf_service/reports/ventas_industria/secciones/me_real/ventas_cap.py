@@ -14,12 +14,19 @@ from datetime import date
 from fgf_service.connectors.APIventas_cap import fetch_APIVentas_cap
 
 
-# AnalisisFacturasVentas  (base, fechas parametrizadas)
+# AnalisisFacturasVentas  (base; arranca el año ANTERIOR, ver nota)
 async def traer_ventas_cap_base(
     fecha_desde: date, fecha_hasta: date, access_token: str
 ) -> list[dict]:
-    """VentasCap base, fechas que se pasan, crudo."""
-    return await fetch_APIVentas_cap(fecha_desde, fecha_hasta, access_token)
+    """VentasCap base, crudo.
+
+    Igual que contratos (PPTO): para poder armar "Exportación real 2025" hay que
+    traer también el año anterior, así que se arranca el 1/1 del año previo al
+    corte (NO desde fecha_desde). La fórmula se ajusta sola: cuando el corte pase
+    a 2027, arranca en 2026. Esto puede cambiar más adelante (lo iremos viendo).
+    """
+    inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
+    return await fetch_APIVentas_cap(inicio, fecha_hasta, access_token)
 
 
 # AnalisisFacturasVentas 2023-1S  (histórico, fechas FIJAS)

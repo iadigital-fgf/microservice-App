@@ -1,8 +1,8 @@
 """Orquestador del reporte VENTAS INDUSTRIA.
 
-Junta TODAS las conexiones a Finnegans (en paralelo) y devuelve un único dict
-con un cajón por consulta del Excel (1:1). El Excel le pega una sola vez y cada
-tabla toma su cajón. Esto es lo que se cachea (corrida 3am).
+Junta TODAS las conexiones a Finnegans y devuelve un único dict con un cajón por
+consulta del Excel (1:1). El Excel le pega una sola vez y cada tabla toma su
+cajón. Esto es lo que se cachea (corrida 3am).
 """
 
 import asyncio
@@ -39,26 +39,38 @@ from fgf_service.core import producto_segmento
 
 logger = logging.getLogger(__name__)
 
+# Límite de llamadas SIMULTÁNEAS a Finnegans. Con las 14 a la vez el servidor se
+# sobrecarga y las más lentas (stock_ext, facturacion_tgt) devuelven 500; de a
+# pocas, todas responden bien.
+_LIMITE = asyncio.Semaphore(6)
 
-async def _seguro(coro) -> list:
-    """Ejecuta una conexión tolerando fallas.
 
-    Si la llamada a Finnegans falla (ej. un 500 por sobrecarga que agotó los
-    reintentos), se loguea y se devuelve [] (cajón vacío) en vez de propagar la
-    excepción. Así una API caída NO tumba todo el reporte: las demás llegan
-    igual y solo ese cajón queda vacío.
+async def _seguro(coro, fallas: list) -> list:
+    """Ejecuta una conexión con límite de concurrencia, tolerando fallas.
+
+    Si falla (ej. un 500 por sobrecarga que agotó los reintentos), loguea, anota
+    la falla en `fallas` y devuelve [] (cajón vacío) en vez de propagar — así una
+    API caída NO tumba todo el reporte. `fallas` le sirve al caller para NO
+    cachear una corrida incompleta (y reintentar en la próxima).
     """
-    try:
-        return await coro
-    except Exception as e:  # noqa: BLE001 — a propósito: cualquier falla -> cajón vacío
-        logger.warning("Una conexión falló; se devuelve cajón vacío: %s", e)
-        return []
+    async with _LIMITE:
+        try:
+            return await coro
+        except Exception as e:  # noqa: BLE001 — a propósito: cualquier falla -> cajón vacío
+            logger.warning("Una conexión falló; se devuelve cajón vacío: %s", e)
+            fallas.append(str(e))
+            return []
 
 
 async def traer_todo(
     fecha_desde: date, fecha_hasta: date, access_token: str
-) -> dict:
-    """Llama a todas las conexiones (en paralelo) y arma el JSON consolidado."""
+) -> tuple[dict, bool]:
+    """Llama a todas las conexiones (en paralelo, limitado) y arma el JSON.
+
+    Devuelve `(reporte, completo)`: `completo=False` si alguna conexión falló.
+    En ese caso el caller NO debería cachear (para reintentar en la próxima).
+    """
+    fallas: list = []
     (
         ventas_cap_base,        # AnalisisFacturasVentas (base)
         ventas_cap_2023_1s,     # AnalisisFacturasVentas 2023-1S
@@ -75,23 +87,23 @@ async def traer_todo(
         despachos,              # Despachos
         analisis_type,          # AnalisisType
     ) = await asyncio.gather(
-        _seguro(traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_ventas_cap_2023_1s(access_token)),
-        _seguro(traer_ventas_cap_2023_2s(access_token)),
-        _seguro(traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_facturacion_fgf_2017_2022(access_token)),
-        _seguro(traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_contratos(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_stock_arg(access_token)),
-        _seguro(traer_stock_ext(access_token)),
-        _seguro(traer_stock_dt(access_token)),
-        _seguro(traer_despachos(fecha_desde, fecha_hasta, access_token)),
-        _seguro(traer_analisis_type(access_token)),
+        _seguro(traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_ventas_cap_2023_1s(access_token), fallas),
+        _seguro(traer_ventas_cap_2023_2s(access_token), fallas),
+        _seguro(traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_facturacion_fgf_2017_2022(access_token), fallas),
+        _seguro(traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_contratos(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_stock_arg(access_token), fallas),
+        _seguro(traer_stock_ext(access_token), fallas),
+        _seguro(traer_stock_dt(access_token), fallas),
+        _seguro(traer_despachos(fecha_desde, fecha_hasta, access_token), fallas),
+        _seguro(traer_analisis_type(access_token), fallas),
     )
 
-    return {
+    reporte = {
         # ── ME real (VentasCap) ──
         "ventas_cap_base": ventas_cap_base,            # AnalisisFacturasVentas (base)
         "ventas_cap_2023_1s": ventas_cap_2023_1s,      # AnalisisFacturasVentas 2023-1S
@@ -113,3 +125,4 @@ async def traer_todo(
         # ── Referencia (estática, mantenida por Marco) ──
         "producto_segmento": producto_segmento.tabla(),  # Producto-Segmento
     }
+    return reporte, len(fallas) == 0
