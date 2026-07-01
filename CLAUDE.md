@@ -128,6 +128,88 @@ responden todas. (Ver `service.py`: `_LIMITE` y `_seguro`.)
 
 ---
 
+## APIs por sección — parámetros y valores fijos
+
+Detalle de **qué API usa cada sección** del reporte, **qué parámetros** manda cada
+API y **cuáles van con valor fijo**. Todas las APIs llevan siempre `ACCESS_TOKEN`
+(el token lo pasa el Excel). Ojo con los nombres de parámetros: no son todos iguales.
+
+### ME real (exportación) → `APIVentascap`
+Parámetros: `PARAMWEBREPORT_FechaDesde`, `PARAMWEBREPORT_FechaHasta`,
+`PARAMWEBREPORT_Empresa`, `ACCESS_TOKEN`.
+**Empresa: siempre vacía** (se manda sin empresa → trae toda la exportación; el
+campo `EMPRESA` de los registros viene como `CAPACITACION`).
+
+| Cajón | FechaDesde | FechaHasta | Empresa |
+|---|---|---|---|
+| `ventas_cap_base` | 1/1 del año anterior al corte (`fecha_hasta.year-1`) | parametrizada | — |
+| `ventas_cap_2023_1s` | **fija** 2023-01-01 | **fija** 2023-06-30 | — |
+| `ventas_cap_2023_2s` | **fija** 2023-07-01 | **fija** 2023-12-31 | — |
+
+### MI real (facturación) → `APIAnalisisFacturacion`
+Parámetros: `PARAMWEBREPORT_FechaDesde`, `PARAMWEBREPORT_FechaHasta`,
+`PARAMWEBREPORT_Empresa`, `ACCESS_TOKEN`.
+**Una llamada por empresa** (empresa fija en cada cajón; cada una trae lo suyo).
+
+| Cajón | Empresa (fija) | FechaDesde | FechaHasta |
+|---|---|---|---|
+| `facturacion_fgf_base` | `EMPRE01` | parametrizada | parametrizada |
+| `facturacion_fgf_2017_2022` | `EMPRE01` | **fija** 2017-01-01 | **fija** 2022-12-31 |
+| `facturacion_dohler` | `DOHLER63` | parametrizada | parametrizada |
+| `facturacion_tucuman` | `TUCUMANTRAPANI69` | parametrizada | parametrizada |
+| `facturacion_tgt` | `TGT61` | parametrizada | parametrizada |
+
+> ⚠️ `facturacion_tgt` (`TGT61`) devuelve **0 filas** — TGT no factura por esta API;
+> sus ventas están en `APIVentascap`. Ver "Errores conocidos / pendientes".
+
+### PPTO → `APIContratosIndustria`
+Parámetros: `PARAMWEBREPORT_FechaDesde`, `PARAMWEBREPORT_FechaHasta`, `ACCESS_TOKEN`.
+**Sin empresa.**
+
+| Cajón | FechaDesde | FechaHasta |
+|---|---|---|
+| `contratos` | 1/1 del año anterior al corte (`fecha_hasta.year-1`) | parametrizada |
+
+### Stock (existencias) → `APIStockProdIndustria`
+Parámetros: `PARAMWEBREPORT_Fecha` (**una sola fecha**, no rango),
+`PARAMWEBREPORT_Empresa`, `ACCESS_TOKEN`.
+**Fecha: siempre `date.today()`** — la API es una foto a hoy, no acepta histórico.
+
+| Cajón | Empresa (fija) | Filtro extra (en código) |
+|---|---|---|
+| `stock_arg` | `EMPRE01` | — |
+| `stock_ext` | `CAPACITACION43` | excluye `DEPOSITO` ∈ {CLIENTE DESTINO, CLIENTE FINAL} |
+| `stock_dt` | `DOHLER63` | — |
+
+> ⚠️ `stock_ext` (`CAPACITACION43`) devuelve **0 filas** — ese depósito no tiene
+> existencias en Finnegans. Ver "Errores conocidos / pendientes".
+
+### Stock (despachos) → `APIDespachosIndustria`
+Parámetros: `PARAMWEBREPORT_fechaDesde`, `PARAMWEBREPORT_fechaHasta`, `ACCESS_TOKEN`.
+**Sin empresa.** ⚠️ Ojo: acá los parámetros de fecha van en **minúscula** (`fechaDesde`
+/`fechaHasta`), a diferencia del resto de las APIs (`FechaDesde`/`FechaHasta`).
+
+| Cajón | fechaDesde | fechaHasta |
+|---|---|---|
+| `despachos` | parametrizada | parametrizada |
+
+### Stock (laboratorio) → `APIAnalisisLaboratorio`
+Parámetros: **solo `ACCESS_TOKEN`** (sin fechas ni empresa — trae todo).
+
+| Cajón | Filtro extra (en código) |
+|---|---|
+| `analisis_type` | deja 9 tipos de `NOMBRE` + dedup por (LOTE, COD_ANA, COD_FINN, NOMBRE) |
+
+Los 9 tipos: `ACIDITY PERCENT, pH 8,1`, `COLOR a*`, `COLOR b*`, `COLOR L*`, `GPL`,
+`pH (at 8º Bx)`, `PULP`, `RATIO CORRECTED`, `TYPE`.
+
+### Referencia → sin API
+| Cajón | Origen |
+|---|---|
+| `producto_segmento` | tabla hardcodeada en `core/producto_segmento.py` (219 filas, sin fruta fresca) |
+
+---
+
 ## Finnegans — particularidades
 
 - **Token**: GET a la API de auth (client_id / client_secret) devuelve un **UUID**
@@ -203,3 +285,8 @@ responden todas. (Ver `service.py`: `_LIMITE` y `_seguro`.)
 - Excel original de Marco:
   `C:\Users\Agustin Fernandez\Desktop\venta industria\VENTAS INDUSTRIA 03 06 2026.xlsm`
   (las conexiones Power Query adentro tienen los parámetros exactos que usa hoy).
+
+## Pendiente 
+
+- **APIStockProdIndustria** con **CAPACITACION43** -> No trae registros con herramientas externas.
+

@@ -54,6 +54,7 @@ async def reporte_crudo(
         # Re-chequeo: otra llamada pudo haberlo calculado mientras esperábamos.
         if clave in _cache:
             return _cache[clave]
-        reporte = await traer_todo(fecha_desde, fecha_hasta, access_token)
-        _cache[clave] = reporte
+        reporte, completo = await traer_todo(fecha_desde, fecha_hasta, access_token)
+        if completo:
+            _cache[clave] = reporte  # solo se cachea una corrida sin fallas
         return reporte
