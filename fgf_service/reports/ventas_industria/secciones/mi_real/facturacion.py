@@ -12,13 +12,20 @@ from fgf_service.connectors.APIanalisis_facturacion import fetch_APIAnalisis_fac
 from fgf_service.core.empresas import MercadoExterno, MercadoInterno
 
 
-# AnalisisFacturasVentas-A  (EMPRE01, base, fechas parametrizadas)
+# AnalisisFacturasVentas-A  (EMPRE01, base; arranca el año ANTERIOR, ver nota)
 async def traer_facturacion_fgf_base(
     fecha_desde: date, fecha_hasta: date, access_token: str
 ) -> list[dict]:
-    """Facturación EMPRE01 (FGF), base, fechas que se pasan, crudo."""
+    """Facturación EMPRE01 (FGF), base, crudo.
+
+    Igual que contratos/ventas_cap: arranca el 1/1 del año anterior al corte (NO
+    desde fecha_desde), para traer el MI real del año previo (ej. 2025) además del
+    actual. El histórico 2017-2022 va en su propio cajón y se appendea en el Excel.
+    OJO: esto deja 2023-2024 sin traer; si hicieran falta, pasar a inicio fijo.
+    """
+    inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
     return await fetch_APIAnalisis_facturacion(
-        fecha_desde, fecha_hasta, access_token, empresa=MercadoInterno.FGF_TRAPANI
+        inicio, fecha_hasta, access_token, empresa=MercadoInterno.FGF_TRAPANI
     )
 
 
@@ -41,13 +48,18 @@ async def traer_facturacion_dohler(
     )
 
 
-# AnalisisFacturasVentas-A SA TT  (TUCUMANTRAPANI69, base, fechas parametrizadas)
+# AnalisisFacturasVentas-A SA TT  (TUCUMANTRAPANI69, base; arranca el año ANTERIOR)
 async def traer_facturacion_tucuman(
     fecha_desde: date, fecha_hasta: date, access_token: str
 ) -> list[dict]:
-    """Facturación TUCUMANTRAPANI69 (SA TT), su propia data, crudo."""
+    """Facturación TUCUMANTRAPANI69 (SA TT), su propia data, crudo.
+
+    También es mercado interno → misma lógica que EMPRE01: arranca el 1/1 del año
+    anterior al corte, para tener el MI real del año previo (ej. 2025).
+    """
+    inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
     return await fetch_APIAnalisis_facturacion(
-        fecha_desde, fecha_hasta, access_token, empresa=MercadoInterno.TUCUMAN_TRAPANI
+        inicio, fecha_hasta, access_token, empresa=MercadoInterno.TUCUMAN_TRAPANI
     )
 
 

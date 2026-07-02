@@ -100,10 +100,10 @@ responden todas. (Ver `service.py`: `_LIMITE` y `_seguro`.)
 | `ventas_cap_base` | APIVentascap | — | **año anterior → corte** (ver nota) |
 | `ventas_cap_2023_1s` | APIVentascap | — | fija 2023-01-01 → 2023-06-30 |
 | `ventas_cap_2023_2s` | APIVentascap | — | fija 2023-07-01 → 2023-12-31 |
-| `facturacion_fgf_base` | APIAnalisisfacturacion | EMPRE01 | parametrizada |
+| `facturacion_fgf_base` | APIAnalisisfacturacion | EMPRE01 | **año anterior → corte** |
 | `facturacion_fgf_2017_2022` | APIAnalisisfacturacion | EMPRE01 | fija 2017-2022 |
 | `facturacion_dohler` | APIAnalisisfacturacion | DOHLER63 | parametrizada |
-| `facturacion_tucuman` | APIAnalisisfacturacion | TUCUMANTRAPANI69 | parametrizada |
+| `facturacion_tucuman` | APIAnalisisfacturacion | TUCUMANTRAPANI69 | **año anterior → corte** |
 | `facturacion_tgt` | APIAnalisisfacturacion | TGT61 | parametrizada |
 | `contratos` | APIContratosIndustria | — | **año anterior → corte** (PPTO) |
 | `stock_arg` | APIStockProdIndustria | EMPRE01 | foto a hoy |
@@ -117,10 +117,11 @@ responden todas. (Ver `service.py`: `_LIMITE` y `_seguro`.)
 - **Históricos** (`2023_1s`, `2023_2s`, `2017_2022`) → fechas **FIJAS**, tal cual.
 - **Resto** → **parametrizadas** desde el Excel (solo se pasan las fechas; las
   empresas quedan fijas en el código).
-- **`ventas_cap_base` y `contratos`** → arrancan el **1/1 del año anterior al corte**
-  (`fecha_hasta.year - 1`), NO desde `fecha_desde`. Motivo: hay que traer el año
-  previo completo (para "Exportación real 2025" y para los contratos de PPTO, que se
-  cargan durante el año anterior). Se ajusta solo cuando cambie el año.
+- **`ventas_cap_base`, `contratos`, `facturacion_fgf_base` y `facturacion_tucuman`**
+  → arrancan el **1/1 del año anterior al corte** (`fecha_hasta.year - 1`), NO desde
+  `fecha_desde`. Motivo: hay que traer el año previo completo (real 2025 de ME y de
+  MI, y los contratos de PPTO que se cargan el año anterior). Se ajusta solo cuando
+  cambie el año.
 
 **Fuera del alcance (queda en el Excel, NO en la API):** `AnalisisFacturasVentas
 2017-2022` (archivo .xlsx), `PROYECCION COBROS` (se calcula desde `contratos`),
@@ -153,11 +154,15 @@ Parámetros: `PARAMWEBREPORT_FechaDesde`, `PARAMWEBREPORT_FechaHasta`,
 
 | Cajón | Empresa (fija) | FechaDesde | FechaHasta |
 |---|---|---|---|
-| `facturacion_fgf_base` | `EMPRE01` | parametrizada | parametrizada |
+| `facturacion_fgf_base` | `EMPRE01` | 1/1 del año anterior al corte (`fecha_hasta.year-1`) | parametrizada |
 | `facturacion_fgf_2017_2022` | `EMPRE01` | **fija** 2017-01-01 | **fija** 2022-12-31 |
 | `facturacion_dohler` | `DOHLER63` | parametrizada | parametrizada |
-| `facturacion_tucuman` | `TUCUMANTRAPANI69` | parametrizada | parametrizada |
+| `facturacion_tucuman` | `TUCUMANTRAPANI69` | 1/1 del año anterior al corte (`fecha_hasta.year-1`) | parametrizada |
 | `facturacion_tgt` | `TGT61` | parametrizada | parametrizada |
+
+> Nota: `facturacion_fgf_base` y `facturacion_tucuman` (mercado interno) arrancan el
+> año anterior para traer el MI real del año previo (ej. 2025). Esto deja **2023-2024
+> sin traer** en el MI; si hicieran falta, pasar a inicio fijo 2023-01-01.
 
 > ⚠️ `facturacion_tgt` (`TGT61`) devuelve **0 filas** — TGT no factura por esta API;
 > sus ventas están en `APIVentascap`. Ver "Errores conocidos / pendientes".
@@ -210,6 +215,72 @@ Los 9 tipos: `ACIDITY PERCENT, pH 8,1`, `COLOR a*`, `COLOR b*`, `COLOR L*`, `GPL
 
 ---
 
+## Verificación contra las queries de Marco (2026-07, Excel terminado)
+
+Se compararon **las 14 queries reales de Marco** (Power Query, en
+`Desktop\venta industria\{ME y MI, PPTO, STOCK}\*.txt`) contra el código, para
+confirmar que **cada consulta llama a la empresa correcta**.
+
+### Empresas — TODAS coinciden ✅
+
+| Consulta de Marco | API | Empresa (Marco = código) |
+|---|---|---|
+| AnalisisFacturasVentas (base) | VentasCap | *(sin empresa)* |
+| AnalisisFacturasVentas 2023-1S / 2S | VentasCap | *(sin empresa)* |
+| AnalisisFacturasVentas-A (base) | Facturación | `EMPRE01` |
+| AnalisisFacturasVentas-A 2017-2022 | Facturación | `EMPRE01` |
+| AnalisisFacturasVentas-A DTARG | Facturación | `DOHLER63` |
+| AnalisisFacturasVentas-A SA TT | Facturación | `TUCUMANTRAPANI69` |
+| AnalisisFacturasVentas-A TGT | Facturación | `TGT61` |
+| Contratos | Contratos | *(sin empresa)* |
+| Stock-ARG | Stock | `EMPRE01` |
+| Stock-EXT | Stock | `CAPACITACION43` |
+| Stock-DT | Stock | `DOHLER63` |
+| Despachos | Despachos | *(sin empresa)* |
+| AnalisisType | Laboratorio | *(sin empresa)* |
+
+**Confirmaciones clave:**
+- `TGT61` (facturación) y `CAPACITACION43` (stock ext) son **exactamente** los
+  códigos que usa Marco → los cajones vienen **vacíos porque el ORIGEN no tiene
+  datos**, NO por código equivocado. (TGT no factura por esta API; su venta es
+  exportación en VentasCap. El depósito CAPACITACION43 hoy no tiene existencias.)
+- **Despachos**: Marco declara `Empre1="EMPRE01"` pero **NO lo usa** en la llamada
+  (solo manda fechas) → va sin empresa, igual que el código.
+- **`AnalisisFacturasVentas 2017-2022`** (de ME/VentasCap) sale de un **archivo Excel**
+  (`\\192.168.168.18\...\Ventas cap 2017-2022.xlsx`), NO de la API → queda en el Excel.
+  En cambio **`AnalisisFacturasVentas-A 2017-2022`** (de MI/Facturación) SÍ sale de la
+  API (`EMPRE01`, 2017-01-01→2022-12-31) → es nuestro cajón `facturacion_fgf_2017_2022`.
+- En el Excel, cada query base **appendea** su histórico (VentasCap base + 2023-1S +
+  2023-2S + 2017-2022 xlsx; Facturación base + 2017-2022). Nosotros los mantenemos como
+  **cajones separados** y Marco los une en el Excel.
+
+### Fechas de inicio — DIFIEREN ⚠️ (pendiente de decisión)
+
+Marco usa **inicios FIJOS**; el código quedó con lógica "año anterior". Diferencias:
+
+| Cajón | Inicio Marco (query) | Inicio código actual | Hueco |
+|---|---|---|---|
+| `ventas_cap_base` | **2024-01-01** (fijo) | `fecha_hasta.year-1` → 2025-01-01 | falta **2024** |
+| `facturacion_fgf_base` | **2023-01-01** (fijo) | `fecha_hasta.year-1` → 2025-01-01 | falta **2023-2024** |
+| `facturacion_tucuman` | **2023-01-01** (fijo) | `fecha_hasta.year-1` → 2025-01-01 | falta **2023-2024** |
+| `despachos` | **2024-01-01** (fijo) | parametrizada (del Excel) | según el Excel |
+| `facturacion_dohler` | 2026-01-01 (fijo) | parametrizada | ~igual (año actual) |
+| `contratos` | celda `FECHADESDE01` (parametrizada) | `fecha_hasta.year-1` → 2025-01-01 | según la celda |
+
+**Decisión pendiente:** para replicar a Marco tal cual convendría pasar esos inicios
+a **fijos** (`ventas_cap_base`→2024-01-01; `facturacion_fgf_base` y `facturacion_tucuman`
+→2023-01-01). Hoy están con "año anterior" (elección de Agustín, "de última lo cambiamos").
+
+### Token (referencia, NO usar credenciales de Marco)
+
+Cada query de Marco **genera su propio token** vía
+`GET .../BSA/api/oauth/token?grant_type=client_credentials&client_id=…&client_secret=…`
+(las credenciales son **de Marco**; no se usan desde el servicio — ver regla). Sirve
+para saber que el endpoint de auth existe y su formato, de cara al pendiente de manejar
+el token del lado del servicio.
+
+---
+
 ## Finnegans — particularidades
 
 - **Token**: GET a la API de auth (client_id / client_secret) devuelve un **UUID**
@@ -251,33 +322,68 @@ Los 9 tipos: `ACIDITY PERCENT, pH 8,1`, `COLOR a*`, `COLOR b*`, `COLOR L*`, `GPL
 
 ## Errores conocidos / pendientes
 
-- **`stock_ext` y `facturacion_tgt` llegaban vacíos**: causa = sobrecarga de
-  Finnegans al disparar las 14 juntas + el cache guardaba la corrida degradada.
-  Mitigado con el **semáforo (6)** + **no cachear corridas incompletas**. Si vuelve
-  a pasar, reiniciar el server para limpiar el cache y probar de nuevo.
+- **`stock_ext` y `facturacion_tgt` vienen vacíos — RESUELTO (no es bug)**: el
+  ORIGEN no tiene datos para esos códigos. Confirmado httpx directo a Finnegans y
+  contra las queries de Marco: `TGT61` no factura por `APIAnalisisFacturacion` (0
+  filas en 2023-2026; TGT vende por VentasCap), y el depósito `CAPACITACION43` no
+  tiene existencias hoy. Los códigos son los MISMOS que usa Marco → correctos. (El
+  semáforo y el "no cachear corridas incompletas" quedan igual como robustez, pero
+  no eran la causa.)
 - **Token del Excel expira**: pendiente manejar el token del lado del servicio.
+- **Fechas de inicio vs Marco**: `ventas_cap_base`, `facturacion_fgf_base` y
+  `facturacion_tucuman` usan "año anterior"; Marco usa inicios fijos (2024/2023).
+  Ver "Verificación contra las queries de Marco". Decidir si alinear.
 
 ---
 
-## Estado / progreso (último avance: 2026-06-30)
+## Plan de producción — hosting en Azure (hoja de ruta)
+
+Objetivo: el servicio vive en Azure, **a las 3am se refresca solo** y el Excel/Power BI
+pide los datos al instante, **sin intervención manual** (ni tokens ni botones).
+PDF completo del plan: **`Plan_Hosting_Azure.pdf`** (en la raíz).
+
+**Piezas elegidas (las más convenientes, costo no es limitante):**
+- **Azure App Service** (Linux, Python) con **“Always On”** + **una sola instancia** →
+  el hosting; el proceso no se apaga (para el job 3am y el cache).
+- **Manejo de token propio** en el servicio (genera y renueva su token con client_id/
+  secret de la empresa) → saca el token del Excel, que se vencía.
+- **Programador 3am** dentro de la app (**APScheduler**) → deja el cache caliente. Sin
+  tecnología aparte.
+- **Azure Cache for Redis** → el cache sobrevive reinicios y deploys (hoy `cache/redis.py`
+  está preparado, sin usar).
+- **Azure Key Vault** (secretos), **GitHub Actions** (deploy automático),
+  **Application Insights** (logs + alertas si el 3am falla), **API key / IP allowlist**
+  (que solo el Excel/Power BI entren).
+
+**Etapas:** 0) preparar repo → 1) token propio → 2) reloj 3am + `/refresh` →
+3) Redis → 4) crear infra Azure → 5) CI/CD GitHub → 6) seguridad + pruebas.
+
+**Para arrancar se necesita:** (1) credenciales de la empresa (client_id/secret) — de
+Agustín, **no las de Marco**; (2) acceso a la cuenta de Azure. **Primer paso: Etapa 1
+(token propio)** — sin eso el 3am no puede autenticarse.
+
+---
+
+## Estado / progreso (último avance: 2026-07-01)
 
 **Hecho:**
-- Pivot completo a **crudo passthrough** (15 cajones). Sacada la app vieja (KPIs,
-  detalle, armado, separación de mercados).
+- Pivot completo a **crudo passthrough** (15 cajones). Sacada la app vieja.
 - **Cache** en memoria + candado; **no cachea corridas incompletas**; **semáforo (6)**
-  para no sobrecargar Finnegans (arreglo de `stock_ext` / `facturacion_tgt` vacíos).
-- **`contratos`** y **`ventas_cap_base`** → arrancan el 1/1 del año anterior al corte
-  (`fecha_hasta.year - 1`), para PPTO y "Exportación real 2025".
-- **CLAUDE.md** reescrito (este archivo) reflejando la arquitectura nueva.
+  (robustez; NO era la causa de las tablas vacías).
+- **Fechas “año anterior”** (`fecha_hasta.year-1`) en `contratos`, `ventas_cap_base`,
+  `facturacion_fgf_base` y `facturacion_tucuman` (para traer el real del año previo).
+- **Router** arreglado: `traer_todo` devuelve `(reporte, completo)`; el 500 quedó resuelto.
+- **Tablas vacías (`stock_ext`, `facturacion_tgt`) — diagnosticadas**: el ORIGEN no
+  tiene datos; los códigos (`CAPACITACION43`, `TGT61`) son los MISMOS que usa Marco.
+- **Excel de Marco verificado**: las 14 queries llaman a la empresa correcta (ver
+  "Verificación contra las queries de Marco"). Excel terminado.
+- **CLAUDE.md** documentado (APIs por sección, verificación, plan de hosting).
+- **Plan de hosting** en PDF (`Plan_Hosting_Azure.pdf`).
 
-**Pendiente (próxima sesión):**
-1. **Probar `ventas_cap_base`** tras reiniciar uvicorn: confirmar que trae desde
-   2025-01-01 (y que el fix de `stock_ext` / `facturacion_tgt` quedó).
-2. **Completar sección PPTO exportación** (columna "VENTAS PPTO USD", desde
-   `contratos` filtrado por el PPTO ME del año). Marco puede pasar su Excel de
-   referencia.
-3. **VENTAS TN de MI real** (quedó en curso).
-4. **Manejo del token** del lado del servicio (hoy hardcodeado en el Excel, expira).
+**Pendiente (próxima sesión — arranca la implementación de producción):**
+1. **Etapa 1: token propio** en el servicio (con credenciales de la empresa).
+2. Decidir **fechas fijas vs año anterior** (ver "Verificación…"; quedó en pausa).
+3. Seguir el plan de hosting (etapas 2→6).
 
 ## Referencias
 
@@ -288,5 +394,7 @@ Los 9 tipos: `ACIDITY PERCENT, pH 8,1`, `COLOR a*`, `COLOR b*`, `COLOR L*`, `GPL
 
 ## Pendiente 
 
-- **APIStockProdIndustria** con **CAPACITACION43** -> No trae registros con herramientas externas.
+- **APIStockProdIndustria con CAPACITACION43** → RESUELTO: no trae registros porque
+  ese depósito no tiene existencias en el origen (mismo código que usa Marco). Ver
+  "Verificación contra las queries de Marco" y "Errores conocidos".
 
