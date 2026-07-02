@@ -34,15 +34,19 @@ _locks: dict = {}
 async def reporte_crudo(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
-    access_token: str | None = None,
+    access_token: str | None = None,  # ignorado: el token ahora lo maneja el servicio
 ) -> dict:
     """Devuelve TODAS las conexiones crudas en un solo JSON consolidado (cacheado).
 
     Los parámetros son opcionales a propósito: Power Query "sondea" la URL base
-    SIN parámetros para validar la fuente; sin los tres datos se devuelve un dict
+    SIN parámetros para validar la fuente; sin las fechas se devuelve un dict
     vacío (si fueran obligatorios daría 422 y rompería la carga).
+
+    `access_token` se sigue ACEPTANDO para no romper el Excel actual de Marco,
+    pero se IGNORA: el servicio genera y renueva su propio token con las
+    credenciales del .env (core/finnegans.py). El Excel solo necesita las fechas.
     """
-    if not (fecha_desde and fecha_hasta and access_token):
+    if not (fecha_desde and fecha_hasta):
         return {}
 
     clave = (fecha_desde, fecha_hasta)
@@ -54,7 +58,7 @@ async def reporte_crudo(
         # Re-chequeo: otra llamada pudo haberlo calculado mientras esperábamos.
         if clave in _cache:
             return _cache[clave]
-        reporte, completo = await traer_todo(fecha_desde, fecha_hasta, access_token)
+        reporte, completo = await traer_todo(fecha_desde, fecha_hasta)
         if completo:
             _cache[clave] = reporte  # solo se cachea una corrida sin fallas
         return reporte

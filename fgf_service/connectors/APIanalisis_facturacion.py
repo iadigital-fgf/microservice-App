@@ -2,7 +2,7 @@ from datetime import date
 from fgf_service.core.finnegans import finnegans
 
 async def fetch_APIAnalisis_facturacion(
-    fecha_desde: date, fecha_hasta: date, access_token: str, empresa: str | None = None
+    fecha_desde: date, fecha_hasta: date, empresa: str | None = None
 ) -> list[dict]:
     """Llama a APIAnalisisFacturacion y devuelve los registros crudos.
 
@@ -16,6 +16,5 @@ async def fetch_APIAnalisis_facturacion(
         params["PARAMWEBREPORT_Empresa"] = empresa
     return await finnegans.get(
         "APIAnalisisFacturacion",
-        access_token=access_token,
         params=params,
     )

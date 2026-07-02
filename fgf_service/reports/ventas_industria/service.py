@@ -62,10 +62,11 @@ async def _seguro(coro, fallas: list) -> list:
             return []
 
 
-async def traer_todo(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> tuple[dict, bool]:
+async def traer_todo(fecha_desde: date, fecha_hasta: date) -> tuple[dict, bool]:
     """Llama a todas las conexiones (en paralelo, limitado) y arma el JSON.
+
+    El token ya no se recibe: lo maneja el cliente de Finnegans solo
+    (core/finnegans.py, credenciales del .env).
 
     Devuelve `(reporte, completo)`: `completo=False` si alguna conexión falló.
     En ese caso el caller NO debería cachear (para reintentar en la próxima).
@@ -87,20 +88,20 @@ async def traer_todo(
         despachos,              # Despachos
         analisis_type,          # AnalisisType
     ) = await asyncio.gather(
-        _seguro(traer_ventas_cap_base(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_ventas_cap_2023_1s(access_token), fallas),
-        _seguro(traer_ventas_cap_2023_2s(access_token), fallas),
-        _seguro(traer_facturacion_fgf_base(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_facturacion_fgf_2017_2022(access_token), fallas),
-        _seguro(traer_facturacion_dohler(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_facturacion_tucuman(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_facturacion_tgt(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_contratos(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_stock_arg(access_token), fallas),
-        _seguro(traer_stock_ext(access_token), fallas),
-        _seguro(traer_stock_dt(access_token), fallas),
-        _seguro(traer_despachos(fecha_desde, fecha_hasta, access_token), fallas),
-        _seguro(traer_analisis_type(access_token), fallas),
+        _seguro(traer_ventas_cap_base(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_ventas_cap_2023_1s(), fallas),
+        _seguro(traer_ventas_cap_2023_2s(), fallas),
+        _seguro(traer_facturacion_fgf_base(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_facturacion_fgf_2017_2022(), fallas),
+        _seguro(traer_facturacion_dohler(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_facturacion_tucuman(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_facturacion_tgt(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_contratos(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_stock_arg(), fallas),
+        _seguro(traer_stock_ext(), fallas),
+        _seguro(traer_stock_dt(), fallas),
+        _seguro(traer_despachos(fecha_desde, fecha_hasta), fallas),
+        _seguro(traer_analisis_type(), fallas),
     )
 
     reporte = {

@@ -13,9 +13,7 @@ from fgf_service.core.empresas import MercadoExterno, MercadoInterno
 
 
 # AnalisisFacturasVentas-A  (EMPRE01, base; arranca el año ANTERIOR, ver nota)
-async def traer_facturacion_fgf_base(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_facturacion_fgf_base(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """Facturación EMPRE01 (FGF), base, crudo.
 
     Igual que contratos/ventas_cap: arranca el 1/1 del año anterior al corte (NO
@@ -25,33 +23,29 @@ async def traer_facturacion_fgf_base(
     """
     inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
     return await fetch_APIAnalisis_facturacion(
-        inicio, fecha_hasta, access_token, empresa=MercadoInterno.FGF_TRAPANI
+        inicio, fecha_hasta, empresa=MercadoInterno.FGF_TRAPANI
     )
 
 
 # AnalisisFacturasVentas-A 2017-2022  (EMPRE01, histórico, fechas FIJAS)
-async def traer_facturacion_fgf_2017_2022(access_token: str) -> list[dict]:
+async def traer_facturacion_fgf_2017_2022() -> list[dict]:
     """Facturación EMPRE01 (FGF), 2017-01-01 → 2022-12-31 (fijo), crudo."""
     return await fetch_APIAnalisis_facturacion(
-        date(2017, 1, 1), date(2022, 12, 31), access_token,
+        date(2017, 1, 1), date(2022, 12, 31),
         empresa=MercadoInterno.FGF_TRAPANI,
     )
 
 
 # AnalisisFacturasVentas-A DTARG  (DOHLER63, base, fechas parametrizadas)
-async def traer_facturacion_dohler(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_facturacion_dohler(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """Facturación DOHLER63 (Dohler), su propia data, crudo."""
     return await fetch_APIAnalisis_facturacion(
-        fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.DOHLER
+        fecha_desde, fecha_hasta, empresa=MercadoExterno.DOHLER
     )
 
 
 # AnalisisFacturasVentas-A SA TT  (TUCUMANTRAPANI69, base; arranca el año ANTERIOR)
-async def traer_facturacion_tucuman(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_facturacion_tucuman(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """Facturación TUCUMANTRAPANI69 (SA TT), su propia data, crudo.
 
     También es mercado interno → misma lógica que EMPRE01: arranca el 1/1 del año
@@ -59,15 +53,13 @@ async def traer_facturacion_tucuman(
     """
     inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
     return await fetch_APIAnalisis_facturacion(
-        inicio, fecha_hasta, access_token, empresa=MercadoInterno.TUCUMAN_TRAPANI
+        inicio, fecha_hasta, empresa=MercadoInterno.TUCUMAN_TRAPANI
     )
 
 
 # AnalisisFacturasVentas-A TGT  (TGT61, base, fechas parametrizadas)
-async def traer_facturacion_tgt(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_facturacion_tgt(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """Facturación TGT61 (TGT), su propia data, crudo."""
     return await fetch_APIAnalisis_facturacion(
-        fecha_desde, fecha_hasta, access_token, empresa=MercadoExterno.TGT
+        fecha_desde, fecha_hasta, empresa=MercadoExterno.TGT
     )

@@ -63,14 +63,17 @@ todo) → `router.py` (endpoint + cache).
 ## Endpoint único
 
 ```
-GET /api/v1/reportes/ventas-industria?fecha_desde=YYYY-MM-DD&fecha_hasta=YYYY-MM-DD&access_token=...
+GET /api/v1/reportes/ventas-industria?fecha_desde=YYYY-MM-DD&fecha_hasta=YYYY-MM-DD
 ```
 
 - Devuelve **UN JSON consolidado con 15 cajones** (ver `Consultas.md` para el mapa
   1:1 Excel ↔ cajón). El Excel le pega **una sola vez** y cada consulta toma su cajón.
 - **Parámetros opcionales a propósito**: Power Query "sondea" la URL base sin
-  parámetros para validar la fuente; sin los tres datos se devuelve `{}` (si fueran
+  parámetros para validar la fuente; sin las fechas se devuelve `{}` (si fueran
   obligatorios daría 422 y rompería la carga).
+- **`access_token` ya NO hace falta** (token propio desde 2026-07-02): el servicio
+  genera y renueva su token solo. El parámetro se sigue aceptando **pero se ignora**,
+  para no romper el Excel actual de Marco hasta que actualice sus consultas.
 
 ### Cache (en memoria)
 
@@ -133,7 +136,8 @@ responden todas. (Ver `service.py`: `_LIMITE` y `_seguro`.)
 
 Detalle de **qué API usa cada sección** del reporte, **qué parámetros** manda cada
 API y **cuáles van con valor fijo**. Todas las APIs llevan siempre `ACCESS_TOKEN`
-(el token lo pasa el Excel). Ojo con los nombres de parámetros: no son todos iguales.
+(el token lo genera el propio servicio — ver "Token propio"). Ojo con los nombres
+de parámetros: no son todos iguales.
 
 ### ME real (exportación) → `APIVentascap`
 Parámetros: `PARAMWEBREPORT_FechaDesde`, `PARAMWEBREPORT_FechaHasta`,
@@ -283,10 +287,20 @@ el token del lado del servicio.
 
 ## Finnegans — particularidades
 
-- **Token**: GET a la API de auth (client_id / client_secret) devuelve un **UUID**
-  que se pasa como query param `ACCESS_TOKEN`. **Expira** → hay que renovarlo.
-  (Hoy en el Excel el token está hardcodeado; manejarlo del lado del servicio es un
-  pendiente.)
+- **Token propio (implementado 2026-07-02)**: el servicio genera y renueva su
+  token solo — el Excel ya no lo manda. Cómo funciona (`core/finnegans.py`):
+  - GET a `FINNEGANS_TOKEN_URL` (`https://api.finneg.com/api/oauth/token`) con
+    `grant_type=client_credentials` + `client_id`/`client_secret` del `.env`
+    (variables `FINNEGANS_CLIENT_ID` / `FINNEGANS_CLIENT_SECRET`; hoy son las
+    credenciales de Agustín — el cuerpo de la respuesta ES el token, un UUID).
+  - El token vive **en memoria** en el cliente (NO en el `.env`: vence). Se pide
+    la primera vez que hace falta y todas las llamadas lo reusan.
+  - Si Finnegans devuelve **401/403** (token vencido), se pide uno nuevo y se
+    reintenta la llamada (a lo sumo una renovación por request). Un **candado**
+    evita que las 14 conexiones en paralelo pidan 14 tokens: una pide, el resto reusa.
+  - Probado 2026-07-02 contra Finnegans real: token OK, reuso OK, llamada a
+    `stock_dt` OK (36 filas). Pendiente menor: verificar qué código devuelve
+    Finnegans REALMENTE cuando el token vence (se asumió 401/403).
 - **Parámetros SIN espacio y fecha `YYYY-MM-DD`**: `PARAMWEBREPORT_Empresa`,
   `PARAMWEBREPORT_FechaDesde/Hasta`. Con espacio la API los **ignora**.
 - Los campos del JSON vienen en **UPPERCASE** (`TOTALFOB`, `EMPRESA`, ...); se
@@ -329,7 +343,10 @@ el token del lado del servicio.
   tiene existencias hoy. Los códigos son los MISMOS que usa Marco → correctos. (El
   semáforo y el "no cachear corridas incompletas" quedan igual como robustez, pero
   no eran la causa.)
-- **Token del Excel expira**: pendiente manejar el token del lado del servicio.
+- **Token del Excel expira — RESUELTO (2026-07-02)**: el servicio maneja su propio
+  token (Etapa 1 del plan de hosting). Ver "Token propio" en "Finnegans —
+  particularidades". Queda verificar el código real de "token vencido" (se asumió
+  401/403) y, más adelante, pasar a credenciales de la empresa (hoy usa las de Agustín).
 - **Fechas de inicio vs Marco**: `ventas_cap_base`, `facturacion_fgf_base` y
   `facturacion_tucuman` usan "año anterior"; Marco usa inicios fijos (2024/2023).
   Ver "Verificación contra las queries de Marco". Decidir si alinear.
@@ -364,9 +381,17 @@ Agustín, **no las de Marco**; (2) acceso a la cuenta de Azure. **Primer paso: E
 
 ---
 
-## Estado / progreso (último avance: 2026-07-01)
+## Estado / progreso (último avance: 2026-07-02)
 
 **Hecho:**
+- **Etapa 1 del plan de hosting: TOKEN PROPIO (2026-07-02)** ✅ — el servicio genera
+  y renueva su token solo; el Excel ya no necesita mandarlo (el parámetro
+  `access_token` se acepta pero se ignora, para no romper el Excel de Marco).
+  Cambios: `config.py` (+3 settings), `finnegans.py` (token en memoria + renovación
+  ante 401/403 + candado), y se sacó `access_token` de toda la cadena (connectors,
+  secciones, service, router). Credenciales en `.env` (hoy las de Agustín; pasar a
+  las de la empresa cuando estén). Probado contra Finnegans real: token + reuso +
+  llamada OK.
 - Pivot completo a **crudo passthrough** (15 cajones). Sacada la app vieja.
 - **Cache** en memoria + candado; **no cachea corridas incompletas**; **semáforo (6)**
   (robustez; NO era la causa de las tablas vacías).
@@ -380,10 +405,14 @@ Agustín, **no las de Marco**; (2) acceso a la cuenta de Azure. **Primer paso: E
 - **CLAUDE.md** documentado (APIs por sección, verificación, plan de hosting).
 - **Plan de hosting** en PDF (`Plan_Hosting_Azure.pdf`).
 
-**Pendiente (próxima sesión — arranca la implementación de producción):**
-1. **Etapa 1: token propio** en el servicio (con credenciales de la empresa).
+**Pendiente (próxima sesión):**
+1. **Etapa 2 del plan de hosting: reloj 3am (APScheduler) + endpoint `/refresh`**
+   — para refrescar el cache sin reiniciar el servidor (el refresco es "pisar el
+   cache con datos nuevos": job diario 3am o botón manual). APScheduler ya arranca
+   en `main.py`, falta cargarle el job. Requiere definir qué fechas usa el job solo.
 2. Decidir **fechas fijas vs año anterior** (ver "Verificación…"; quedó en pausa).
-3. Seguir el plan de hosting (etapas 2→6).
+3. Cambiar a **credenciales de la empresa** en el `.env` cuando estén (hoy las de Agustín).
+4. Seguir el plan de hosting (etapas 3→6: Redis, Azure, CI/CD, seguridad).
 
 ## Referencias
 

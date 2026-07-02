@@ -15,9 +15,7 @@ from fgf_service.connectors.APIventas_cap import fetch_APIVentas_cap
 
 
 # AnalisisFacturasVentas  (base; arranca el año ANTERIOR, ver nota)
-async def traer_ventas_cap_base(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_ventas_cap_base(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """VentasCap base, crudo.
 
     Igual que contratos (PPTO): para poder armar "Exportación real 2025" hay que
@@ -26,16 +24,16 @@ async def traer_ventas_cap_base(
     a 2027, arranca en 2026. Esto puede cambiar más adelante (lo iremos viendo).
     """
     inicio = date(fecha_hasta.year - 1, 1, 1)  # corte 2026 -> 2025-01-01
-    return await fetch_APIVentas_cap(inicio, fecha_hasta, access_token)
+    return await fetch_APIVentas_cap(inicio, fecha_hasta)
 
 
 # AnalisisFacturasVentas 2023-1S  (histórico, fechas FIJAS)
-async def traer_ventas_cap_2023_1s(access_token: str) -> list[dict]:
+async def traer_ventas_cap_2023_1s() -> list[dict]:
     """VentasCap 2023-01-01 → 2023-06-30 (fijo), crudo."""
-    return await fetch_APIVentas_cap(date(2023, 1, 1), date(2023, 6, 30), access_token)
+    return await fetch_APIVentas_cap(date(2023, 1, 1), date(2023, 6, 30))
 
 
 # AnalisisFacturasVentas 2023-2S  (histórico, fechas FIJAS)
-async def traer_ventas_cap_2023_2s(access_token: str) -> list[dict]:
+async def traer_ventas_cap_2023_2s() -> list[dict]:
     """VentasCap 2023-07-01 → 2023-12-31 (fijo), crudo."""
-    return await fetch_APIVentas_cap(date(2023, 7, 1), date(2023, 12, 31), access_token)
+    return await fetch_APIVentas_cap(date(2023, 7, 1), date(2023, 12, 31))

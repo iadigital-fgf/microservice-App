@@ -15,6 +15,13 @@ class Settings(BaseSettings):
 
     finnegans_base_url: str
 
+    # Token propio: el servicio genera y renueva su token con estas credenciales
+    # (van en el .env, NO en el código). El token en sí NO va acá: vence, así que
+    # vive en memoria dentro del cliente (core/finnegans.py).
+    finnegans_client_id: str
+    finnegans_client_secret: str
+    finnegans_token_url: str = "https://api.finneg.com/api/oauth/token"
+
     # Redis
     redis_url: str = "redis://localhost:6379"
     redis_ttl_seconds: int = 300

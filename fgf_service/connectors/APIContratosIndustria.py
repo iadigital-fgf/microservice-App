@@ -3,7 +3,7 @@ from fgf_service.core.finnegans import finnegans
 
 
 async def fetch_APIContratosIndustria(
-    fecha_desde: date, fecha_hasta: date, access_token: str
+    fecha_desde: date, fecha_hasta: date
 ) -> list[dict]:
     """Llama a APIContratosIndustria y devuelve los contratos crudos.
 
@@ -15,7 +15,6 @@ async def fetch_APIContratosIndustria(
 
     return await finnegans.get(
         "APIContratosIndustria",
-        access_token=access_token,
         params={
             "PARAMWEBREPORT_FechaDesde": fecha_desde.strftime("%Y-%m-%d"),
             "PARAMWEBREPORT_FechaHasta": fecha_hasta.strftime("%Y-%m-%d"),

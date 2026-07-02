@@ -9,8 +9,6 @@ from fgf_service.connectors.APIDespachosIndustria import fetch_APIDespachosIndus
 
 
 # Despachos
-async def traer_despachos(
-    fecha_desde: date, fecha_hasta: date, access_token: str
-) -> list[dict]:
+async def traer_despachos(fecha_desde: date, fecha_hasta: date) -> list[dict]:
     """APIDespachosIndustria tal cual la API (crudo)."""
-    return await fetch_APIDespachosIndustria(fecha_desde, fecha_hasta, access_token)
+    return await fetch_APIDespachosIndustria(fecha_desde, fecha_hasta)

@@ -29,8 +29,8 @@ def _dedup(filas: list[dict], claves: tuple) -> list[dict]:
 
 
 # AnalisisType
-async def traer_analisis_type(access_token: str) -> list[dict]:
+async def traer_analisis_type() -> list[dict]:
     """APIAnalisisLaboratorio filtrada a 9 tipos + dedup (igual que AnalisisType)."""
-    crudo = await fetch_APIAnalisis_laboratorio(access_token)
+    crudo = await fetch_APIAnalisis_laboratorio()
     filtrado = [f for f in crudo if f.get("NOMBRE") in _TIPOS_ANALISIS]
     return _dedup(filtrado, ("LOTE", "COD_ANA", "COD_FINN", "NOMBRE"))

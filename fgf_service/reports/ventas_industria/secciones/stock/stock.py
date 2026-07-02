@@ -16,29 +16,23 @@ _DEPOSITOS_CLIENTE = {"CLIENTE DESTINO", "CLIENTE FINAL"}
 
 
 # Stock-ARG
-async def traer_stock_arg(access_token: str) -> list[dict]:
+async def traer_stock_arg() -> list[dict]:
     """APIStockProdIndustria — EMPRE01 (Argentina), foto a hoy."""
-    return await fetch_APIStockProdIndustria(
-        date.today(), access_token, empresa=Stock.ARG
-    )
+    return await fetch_APIStockProdIndustria(date.today(), empresa=Stock.ARG)
 
 
 # Stock-EXT
-async def traer_stock_ext(access_token: str) -> list[dict]:
+async def traer_stock_ext() -> list[dict]:
     """APIStockProdIndustria — CAPACITACION43 (Exterior), foto a hoy.
 
     FILTRO (igual que la query Stock-EXT): se excluyen las filas cuyo DEPOSITO
     es 'CLIENTE DESTINO' o 'CLIENTE FINAL' (stock ya entregado al cliente).
     """
-    filas = await fetch_APIStockProdIndustria(
-        date.today(), access_token, empresa=Stock.EXT
-    )
+    filas = await fetch_APIStockProdIndustria(date.today(), empresa=Stock.EXT)
     return [f for f in filas if f.get("DEPOSITO") not in _DEPOSITOS_CLIENTE]
 
 
 # Stock-DT
-async def traer_stock_dt(access_token: str) -> list[dict]:
+async def traer_stock_dt() -> list[dict]:
     """APIStockProdIndustria — DOHLER63 (Dohler), foto a hoy."""
-    return await fetch_APIStockProdIndustria(
-        date.today(), access_token, empresa=Stock.DT
-    )
+    return await fetch_APIStockProdIndustria(date.today(), empresa=Stock.DT)
