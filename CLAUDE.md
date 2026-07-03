@@ -46,8 +46,10 @@ fgf_service/
 │   └── APIAnalisisLaboratorio.py
 └── reports/
     └── ventas_industria/
-        ├── router.py          # UN endpoint + cache en memoria
+        ├── router.py          # endpoints: reporte (cacheado) + /refresh
         ├── service.py         # orquesta TODAS las conexiones (asyncio.gather) → arma el JSON
+        ├── cache_memoria.py   # cache en memoria (dict + candados), compartido
+        ├── refresh.py         # refrescar() (pisa el cache) + fechas_estandar()
         └── secciones/         # 1 función por consulta del Excel (1:1)
             ├── me_real/ventas_cap.py
             ├── mi_real/facturacion.py
@@ -56,7 +58,8 @@ fgf_service/
 ```
 
 Flujo: `connectors` → `secciones` (1 función = 1 cajón) → `service.py` (junta
-todo) → `router.py` (endpoint + cache).
+todo) → `router.py` (endpoint + cache). El job 3am (`main.py`) y el `/refresh`
+llaman a `refresh.refrescar()`, que recalcula y pisa el cache.
 
 ---
 
@@ -75,17 +78,30 @@ GET /api/v1/reportes/ventas-industria?fecha_desde=YYYY-MM-DD&fecha_hasta=YYYY-MM
   genera y renueva su token solo. El parámetro se sigue aceptando **pero se ignora**,
   para no romper el Excel actual de Marco hasta que actualice sus consultas.
 
-### Cache (en memoria)
+### Cache (en memoria) + refresco (Etapa 2, 2026-07-03)
 
-- Clave = `(fecha_desde, fecha_hasta)`. La primera llamada calcula y guarda; las
-  siguientes salen al instante. **Sin expiración**: para datos frescos se **reinicia
-  el servidor** (eso limpia el cache).
-- Un **candado** (`asyncio.Lock`) evita que, cuando el Excel dispara las tablas casi
-  a la vez con el cache vacío, se le pegue muchas veces a Finnegans: una sola calcula
-  y las demás esperan ese resultado.
-- **No se cachea una corrida incompleta**: si alguna conexión falló, el resultado NO
-  se guarda, así la próxima llamada reintenta (evita que una corrida degradada quede
-  pegada devolviendo cajones vacíos).
+- Vive en `cache_memoria.py`. Clave = `(fecha_desde, fecha_hasta)`. La primera
+  llamada calcula y guarda; las siguientes salen al instante. **Sin expiración**:
+  los datos frescos entran **pisando** el cache (job 3am o `/refresh`), no por
+  vencimiento. Reiniciar el servidor también lo limpia (queda vacío).
+- **Fechas estándar** (`refresh.fechas_estandar()`): `1/1 → 31/12 del año actual`
+  (2026-01-01 → 2026-12-31). Es el rango FIJO que comparten el job 3am y el Excel:
+  misma clave todo el año → el Excel siempre encuentra el cache caliente. Cambia
+  sola el 1 de enero. **Los datos viejos NO se piden con otras fechas: Marco filtra
+  en el Excel** (los cajones ya traen el año anterior + históricos).
+- **Job 3am** (APScheduler, registrado en `main.py`, id `refresh_3am`): todos los
+  días a las 3:00 ejecuta `refrescar()` → recalcula TODO y pisa el cache. Con
+  `misfire_grace_time=3600`. OJO: requiere el proceso vivo a las 3am (en Azure con
+  Always On sí; en la PC de desarrollo solo si está prendida y uvicorn corriendo).
+- **`GET /api/v1/reportes/ventas-industria/refresh`**: botón manual — misma función.
+  Tarda ~76-100 seg y responde `{ok, cache_actualizado, duracion_seg, filas_por_cajon}`.
+  Mientras corre, el cache viejo sigue sirviendo. Desde el Excel se dispara con el
+  botón VBA "Traer datos frescos" (macro que llama al /refresh y después RefreshAll).
+- **El refresh NO pisa el cache si la corrida vino incompleta** (alguna conexión
+  falló): queda el dato anterior (Marco ve datos de ayer, nunca cajones vacíos).
+  Igual que siempre: el GET normal tampoco cachea corridas incompletas.
+- Probado 2026-07-03: `/refresh` 76 seg corrida completa; reporte con fechas
+  estándar respondió en 427 ms desde el cache; job registrado en el log de arranque.
 
 ### Concurrencia limitada
 
@@ -381,9 +397,24 @@ Agustín, **no las de Marco**; (2) acceso a la cuenta de Azure. **Primer paso: E
 
 ---
 
-## Estado / progreso (último avance: 2026-07-02)
+## Estado / progreso (último avance: 2026-07-03)
 
 **Hecho:**
+- **Etapa 2 del plan de hosting: JOB 3AM + /REFRESH (2026-07-03)** ✅ — el cache
+  ahora se refresca solo: job diario 3:00 (`refresh_3am` en `main.py`) + endpoint
+  manual `GET .../ventas-industria/refresh`. Ambos llaman a `refresh.refrescar()`:
+  recalcula con las **fechas estándar** (1/1 → 31/12 del año actual, mismas que el
+  Excel) y pisa el cache SOLO si la corrida vino completa. Cache movido a módulo
+  propio (`cache_memoria.py`). Probado: refresh 76 seg, reporte desde cache 427 ms.
+  Del lado del Excel: botón VBA "Traer datos frescos" (llama /refresh + RefreshAll)
+  — pendiente de pegar en el Excel de Marco (requiere guardarlo como .xlsm).
+- **Excel conectado al microservicio — debugging (2026-07-03)**: dos errores del
+  Excel de Agustín resueltos (no eran del servicio): (1) un paso "Convertido en
+  tabla" (`Record.ToTable`) de más en `APIConsolidacion` rompía los 14 cajones
+  ("column of the table wasn't found"); (2) editar el paso Origen con "Editar
+  configuración" borra `RelativePath`/`Query` → 404 a la raíz. Regla: las fechas
+  se cambian SOLO editando `FechaDesde`/`FechaHasta` en el Editor avanzado, y
+  `APIConsolidacion` debe terminar `in Origen` (devuelve un RECORD, no tabla).
 - **Etapa 1 del plan de hosting: TOKEN PROPIO (2026-07-02)** ✅ — el servicio genera
   y renueva su token solo; el Excel ya no necesita mandarlo (el parámetro
   `access_token` se acepta pero se ignora, para no romper el Excel de Marco).
@@ -406,13 +437,12 @@ Agustín, **no las de Marco**; (2) acceso a la cuenta de Azure. **Primer paso: E
 - **Plan de hosting** en PDF (`Plan_Hosting_Azure.pdf`).
 
 **Pendiente (próxima sesión):**
-1. **Etapa 2 del plan de hosting: reloj 3am (APScheduler) + endpoint `/refresh`**
-   — para refrescar el cache sin reiniciar el servidor (el refresco es "pisar el
-   cache con datos nuevos": job diario 3am o botón manual). APScheduler ya arranca
-   en `main.py`, falta cargarle el job. Requiere definir qué fechas usa el job solo.
+1. **Pegar el botón VBA "Traer datos frescos"** en el Excel (guardarlo como .xlsm).
 2. Decidir **fechas fijas vs año anterior** (ver "Verificación…"; quedó en pausa).
 3. Cambiar a **credenciales de la empresa** en el `.env` cuando estén (hoy las de Agustín).
 4. Seguir el plan de hosting (etapas 3→6: Redis, Azure, CI/CD, seguridad).
+   Recordar: en producción uvicorn va SIN `--reload` (en dev, un reload a las 3am
+   mataría el job; y cada reload limpia el cache).
 
 ## Referencias
 
