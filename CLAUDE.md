@@ -66,6 +66,47 @@ llaman a `refresh.refrescar()`, que recalcula y pisa el cache.
 
 ---
 
+## Cómo agregar un reporte nuevo (patrón escalable)
+
+Con el tiempo se van a sumar más reportes con la misma implementación. El molde
+es `reports/ventas_industria/` — cada reporte nuevo es una carpeta igual, y los
+`connectors` se COMPARTEN entre todos.
+
+**Pasos:**
+1. **Connector**: si la API de Finnegans ya tiene archivo en `connectors/`, se
+   reusa tal cual. Si es una API nueva, se crea 1 archivo nuevo ahí (crudo,
+   devuelve `list[dict]`).
+2. **Carpeta del reporte**: `reports/<nombre_reporte>/` con la misma estructura:
+   `router.py`, `service.py`, `refresh.py`, `secciones/` (1 función = 1 cajón).
+3. **Endpoint**: `/api/v1/reportes/<nombre-reporte>` + su `/refresh`. Registrar
+   el router en `main.py`.
+
+**Convenciones (valen para TODOS los reportes):**
+- Passthrough **crudo**: el servicio NO calcula nada; los cálculos van en el
+  Excel / Power BI.
+- 1 cajón = 1 consulta del cliente (Excel o reporte web).
+- Empresas **fijas en el código**; fechas parametrizadas desde el cliente.
+- **No cachear corridas incompletas** (si una conexión falló, no se pisa el cache).
+
+**Para cuando llegue el reporte #2 (NO hacerlo antes — sería especular):**
+1. **Cache compartido**: mover `cache_memoria.py` a un módulo común; clave
+   `(reporte, fecha_desde, fecha_hasta)`.
+2. **Registro de jobs 3am**: lista de reportes en `main.py`; el scheduler recorre
+   la lista y registra un job por reporte, con horarios **escalonados**
+   (3:00, 3:15, 3:30…) para no sobrecargar Finnegans.
+3. **Semáforo GLOBAL**: mover el límite de 6 llamadas simultáneas de
+   `service.py` a `core/`, compartido entre todos los reportes (si cada reporte
+   tiene su propio límite de 6, dos reportes a la vez = 12 → vuelven los 500).
+
+**Objetivo final del proyecto:** plasmar el resultado en un **reporte web**
+(recomendado: Power BI Service, reusa el modelo/DAX de Marco) y usar el Excel
+para **auditar** los números. Ambos leen el mismo endpoint/cache → deben
+coincidir. Pendiente de ese camino: la tabla `Segmentacion_Manual` de Marco
+tendría que pasar a un lugar compartido (ej. otro cajón hardcodeado, como
+`producto_segmento`).
+
+---
+
 ## Endpoint único
 
 ```
