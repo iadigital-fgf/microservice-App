@@ -39,22 +39,25 @@ fgf_service/
 │   └── producto_segmento.py   # tabla Producto-Segmento hardcodeada (219, sin fruta fresca)
 ├── connectors/                # 1 archivo por API de Finnegans → devuelven list[dict] crudos
 │   ├── APIventas_cap.py
-│   ├── APIAnalisisfacturacion.py
+│   ├── APIanalisis_facturacion.py
 │   ├── APIContratosIndustria.py
 │   ├── APIStockProdIndustria.py
 │   ├── APIDespachosIndustria.py
-│   └── APIAnalisisLaboratorio.py
-└── reports/
-    └── ventas_industria/
-        ├── router.py          # endpoints: reporte (cacheado) + /refresh
-        ├── service.py         # orquesta TODAS las conexiones (asyncio.gather) → arma el JSON
-        ├── cache_memoria.py   # cache en memoria (dict + candados), compartido
-        ├── refresh.py         # refrescar() (pisa el cache) + fechas_estandar()
-        └── secciones/         # 1 función por consulta del Excel (1:1)
-            ├── me_real/ventas_cap.py
-            ├── mi_real/facturacion.py
-            ├── ppto/contratos.py
-            └── stock/ (stock.py, despachos.py, laboratorio.py)
+│   └── APIanalisis_laboratorio.py
+├── cache/
+│   └── redis.py               # cache Redis (Etapa 3 del hosting) — preparado, SIN usar
+├── reports/
+│   └── ventas_industria/
+│       ├── router.py          # endpoints: reporte (cacheado) + /refresh
+│       ├── service.py         # orquesta TODAS las conexiones (asyncio.gather) → arma el JSON
+│       ├── cache_memoria.py   # cache en memoria (dict + candados), compartido
+│       ├── refresh.py         # refrescar() (pisa el cache) + fechas_estandar()
+│       └── secciones/         # 1 función por consulta del Excel (1:1)
+│           ├── me_real/ventas_cap.py
+│           ├── mi_real/facturacion.py
+│           ├── ppto/contratos.py
+│           └── stock/ (stock.py, despachos.py, laboratorio.py)
+└── main.py                    # app FastAPI + job 3am (APScheduler)
 ```
 
 Flujo: `connectors` → `secciones` (1 función = 1 cajón) → `service.py` (junta
